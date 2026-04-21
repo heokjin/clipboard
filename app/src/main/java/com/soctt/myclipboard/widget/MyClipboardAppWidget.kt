@@ -1,0 +1,492 @@
+package com.soctt.myclipboard.widget
+
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.glance.GlanceModifier
+import androidx.glance.Image
+import androidx.glance.LocalSize
+import androidx.glance.action.Action
+import androidx.glance.action.ActionParameters
+import androidx.glance.action.actionParametersOf
+import androidx.glance.action.actionStartActivity
+import androidx.glance.action.clickable
+import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.SizeMode
+import androidx.glance.appwidget.action.ActionCallback
+import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.state.updateAppWidgetState
+import androidx.glance.background
+import androidx.glance.currentState
+import androidx.glance.layout.Column
+import androidx.glance.layout.Row
+import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.fillMaxWidth
+import androidx.glance.layout.height
+import androidx.glance.layout.padding
+import androidx.glance.layout.width
+import androidx.glance.state.PreferencesGlanceStateDefinition
+import androidx.glance.text.FontWeight
+import androidx.glance.text.Text
+import androidx.glance.text.TextStyle
+import androidx.glance.unit.ColorProvider
+import com.soctt.myclipboard.MainActivity
+import com.soctt.myclipboard.R
+import com.soctt.myclipboard.data.ClipboardRepository
+import com.soctt.myclipboard.data.ReminderRepository
+import com.soctt.myclipboard.data.local.ClipboardPhraseEntity
+import com.soctt.myclipboard.data.local.ReminderEntity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+class MyClipboardAppWidget : GlanceAppWidget() {
+
+    override val stateDefinition = PreferencesGlanceStateDefinition
+
+    override val sizeMode: SizeMode = SizeMode.Responsive(
+        setOf(
+            androidx.compose.ui.unit.DpSize(180.dp, 150.dp),
+            androidx.compose.ui.unit.DpSize(250.dp, 150.dp),
+            androidx.compose.ui.unit.DpSize(400.dp, 150.dp),
+            androidx.compose.ui.unit.DpSize(180.dp, 230.dp),
+            androidx.compose.ui.unit.DpSize(250.dp, 230.dp),
+            androidx.compose.ui.unit.DpSize(400.dp, 230.dp),
+            androidx.compose.ui.unit.DpSize(180.dp, 320.dp),
+            androidx.compose.ui.unit.DpSize(250.dp, 320.dp),
+            androidx.compose.ui.unit.DpSize(400.dp, 320.dp),
+            androidx.compose.ui.unit.DpSize(320.dp, 150.dp),
+            androidx.compose.ui.unit.DpSize(320.dp, 230.dp),
+            androidx.compose.ui.unit.DpSize(320.dp, 320.dp),
+        )
+    )
+
+    override suspend fun provideGlance(
+        context: Context,
+        id: androidx.glance.GlanceId,
+    ) {
+        val snapshot = withContext(Dispatchers.IO) {
+            WidgetSnapshot(
+                reminders = ReminderRepository(context).getRecentReminders(limit = 12),
+                phrases = ClipboardRepository(context).getRecentPhrases(limit = 12),
+            )
+        }
+
+        provideContent {
+            WidgetContent(
+                reminders = snapshot.reminders,
+                phrases = snapshot.phrases,
+            )
+        }
+    }
+}
+
+class MyClipboardAppWidgetReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = MyClipboardAppWidget()
+}
+
+private data class WidgetSnapshot(
+    val reminders: List<ReminderEntity>,
+    val phrases: List<ClipboardPhraseEntity>,
+)
+
+private enum class WidgetPage(
+    val value: String,
+) {
+    Reminder(MyClipboardWidgetNavigation.PAGE_REMINDER),
+    Clipboard(MyClipboardWidgetNavigation.PAGE_CLIPBOARD),
+    ;
+
+    companion object {
+        fun fromValue(value: String?): WidgetPage {
+            return entries.firstOrNull { it.value == value } ?: Reminder
+        }
+    }
+}
+
+private object WidgetStateKeys {
+    val currentPage = stringPreferencesKey("widget_current_page")
+}
+
+private object WidgetActionKeys {
+    val page = ActionParameters.Key<String>("widget_page")
+    val phraseId = ActionParameters.Key<Long>("widget_phrase_id")
+    val startPage = ActionParameters.Key<String>(MyClipboardWidgetNavigation.EXTRA_START_PAGE)
+    val reminderId = ActionParameters.Key<Long>(MyClipboardWidgetNavigation.EXTRA_REMINDER_ID)
+}
+
+private object WidgetColors {
+    val background = Color(0xFFF6F2EA)
+    val surface = Color(0xFFFFFFFF)
+    val selectedTab = Color(0xFFE5D4B8)
+    val unselectedTab = Color(0xFFF1EBE2)
+    val itemSurface = Color(0xFFFCF9F4)
+    val subtleText = Color(0xFF6F675D)
+}
+
+@androidx.compose.runtime.Composable
+private fun WidgetContent(
+    reminders: List<ReminderEntity>,
+    phrases: List<ClipboardPhraseEntity>,
+) {
+    val preferences = currentState<Preferences>()
+    val currentPage = WidgetPage.fromValue(preferences[WidgetStateKeys.currentPage])
+    val size = LocalSize.current
+    val isWide = size.width.value >= 360f
+    val openCurrentPageAction = actionStartActivity<MainActivity>(
+        actionParametersOf(WidgetActionKeys.startPage to currentPage.value)
+    )
+
+    Column(
+        modifier = GlanceModifier
+            .fillMaxSize()
+            .background(WidgetColors.background)
+            .padding(12.dp),
+    ) {
+        Row(modifier = GlanceModifier.fillMaxWidth()) {
+            Row {
+                WidgetTabChip(
+                    text = when (currentPage) {
+                        WidgetPage.Reminder -> "● " + currentPageLabel(WidgetPage.Reminder)
+                        WidgetPage.Clipboard -> currentPageLabel(WidgetPage.Reminder)
+                    },
+                    selected = currentPage == WidgetPage.Reminder,
+                    action = actionRunCallback<SwitchWidgetPageAction>(
+                        actionParametersOf(WidgetActionKeys.page to WidgetPage.Reminder.value)
+                    ),
+                )
+
+                Spacer(modifier = GlanceModifier.width(8.dp))
+
+                WidgetTabChip(
+                    text = when (currentPage) {
+                        WidgetPage.Clipboard -> "● " + currentPageLabel(WidgetPage.Clipboard)
+                        WidgetPage.Reminder -> currentPageLabel(WidgetPage.Clipboard)
+                    },
+                    selected = currentPage == WidgetPage.Clipboard,
+                    action = actionRunCallback<SwitchWidgetPageAction>(
+                        actionParametersOf(WidgetActionKeys.page to WidgetPage.Clipboard.value)
+                    ),
+                )
+            }
+
+            Spacer(modifier = GlanceModifier.defaultWeight())
+
+            Image(
+                provider = androidx.glance.ImageProvider(R.drawable.ic_widget_refresh),
+                contentDescription = androidx.glance.LocalContext.current.getString(R.string.widget_refresh_action),
+                modifier = GlanceModifier
+                    .clickable(actionRunCallback<RefreshWidgetAction>())
+                    .padding(4.dp),
+            )
+        }
+
+        Spacer(modifier = GlanceModifier.height(10.dp))
+
+        Column(
+            modifier = GlanceModifier
+                .fillMaxWidth()
+                .defaultWeight()
+                .clickable(openCurrentPageAction),
+        ) {
+            when (currentPage) {
+                WidgetPage.Reminder -> ReminderWidgetList(
+                    reminders = reminders,
+                    rows = reminderRowCount(size.height.value),
+                    columns = if (isWide) 2 else 1,
+                )
+
+                WidgetPage.Clipboard -> ClipboardWidgetList(
+                    phrases = phrases,
+                    rows = clipboardRowCount(size.height.value),
+                    columns = if (isWide) 2 else 1,
+                    isWide = isWide,
+                )
+            }
+        }
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun currentPageLabel(
+    page: WidgetPage,
+): String {
+    val context = androidx.glance.LocalContext.current
+    return when (page) {
+        WidgetPage.Reminder -> context.getString(R.string.widget_tab_reminder)
+        WidgetPage.Clipboard -> context.getString(R.string.widget_tab_clipboard)
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun WidgetTabChip(
+    text: String,
+    selected: Boolean,
+    action: Action,
+) {
+    Text(
+        text = text,
+        modifier = GlanceModifier
+            .background(if (selected) WidgetColors.selectedTab else WidgetColors.unselectedTab)
+            .clickable(action)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        style = TextStyle(
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+        ),
+        maxLines = 1,
+    )
+}
+
+@androidx.compose.runtime.Composable
+private fun ReminderWidgetList(
+    reminders: List<ReminderEntity>,
+    rows: Int,
+    columns: Int,
+) {
+    val context = androidx.glance.LocalContext.current
+
+    if (reminders.isEmpty()) {
+        EmptyWidgetMessage(
+            text = context.getString(R.string.widget_empty_reminders),
+            action = actionStartActivity<MainActivity>(
+                actionParametersOf(WidgetActionKeys.startPage to MyClipboardWidgetNavigation.PAGE_REMINDER)
+            ),
+        )
+        return
+    }
+
+    val visibleItems = reminders.take(rows * columns)
+    Column(modifier = GlanceModifier.fillMaxSize()) {
+        visibleItems.chunked(columns).forEachIndexed { index, rowItems ->
+            Row(modifier = GlanceModifier.fillMaxWidth()) {
+                rowItems.forEachIndexed { itemIndex, reminder ->
+                    ReminderWidgetItem(
+                        reminder = reminder,
+                        modifier = if (columns > 1) {
+                            GlanceModifier.defaultWeight()
+                        } else {
+                            GlanceModifier.fillMaxWidth()
+                        },
+                    )
+                    if (columns > 1 && itemIndex != rowItems.lastIndex) {
+                        Spacer(modifier = GlanceModifier.width(6.dp))
+                    }
+                }
+                if (columns > 1 && rowItems.size < columns) {
+                    Spacer(modifier = GlanceModifier.defaultWeight())
+                }
+            }
+            if (index != visibleItems.chunked(columns).lastIndex) {
+                Spacer(modifier = GlanceModifier.height(6.dp))
+            }
+        }
+        Spacer(modifier = GlanceModifier.defaultWeight())
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun ReminderWidgetItem(
+    reminder: ReminderEntity,
+    modifier: GlanceModifier = GlanceModifier,
+) {
+    Text(
+        text = reminder.text,
+        modifier = modifier
+            .background(WidgetColors.itemSurface)
+            .clickable(
+                actionStartActivity<MainActivity>(
+                    actionParametersOf(
+                        WidgetActionKeys.startPage to MyClipboardWidgetNavigation.PAGE_REMINDER,
+                        WidgetActionKeys.reminderId to reminder.id,
+                    )
+                )
+            )
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        style = TextStyle(fontSize = 13.sp),
+        maxLines = 2,
+    )
+}
+
+@androidx.compose.runtime.Composable
+private fun ClipboardWidgetList(
+    phrases: List<ClipboardPhraseEntity>,
+    rows: Int,
+    columns: Int,
+    isWide: Boolean,
+) {
+    val context = androidx.glance.LocalContext.current
+
+    if (phrases.isEmpty()) {
+        EmptyWidgetMessage(
+            text = context.getString(R.string.widget_empty_clipboard),
+            action = actionStartActivity<MainActivity>(
+                actionParametersOf(WidgetActionKeys.startPage to MyClipboardWidgetNavigation.PAGE_CLIPBOARD)
+            ),
+        )
+        return
+    }
+
+    val visibleItems = phrases.take(rows * columns)
+    Column(modifier = GlanceModifier.fillMaxSize()) {
+        visibleItems.chunked(columns).forEachIndexed { index, rowItems ->
+            Row(modifier = GlanceModifier.fillMaxWidth()) {
+                rowItems.forEachIndexed { itemIndex, phrase ->
+                    ClipboardWidgetItem(
+                        phrase = phrase,
+                        modifier = if (columns > 1) {
+                            GlanceModifier.defaultWeight()
+                        } else {
+                            GlanceModifier.fillMaxWidth()
+                        },
+                        contentMaxLines = if (isWide) 2 else 1,
+                    )
+                    if (columns > 1 && itemIndex != rowItems.lastIndex) {
+                        Spacer(modifier = GlanceModifier.width(6.dp))
+                    }
+                }
+                if (columns > 1 && rowItems.size < columns) {
+                    Spacer(modifier = GlanceModifier.defaultWeight())
+                }
+            }
+            if (index != visibleItems.chunked(columns).lastIndex) {
+                Spacer(modifier = GlanceModifier.height(6.dp))
+            }
+        }
+        Spacer(modifier = GlanceModifier.defaultWeight())
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun ClipboardWidgetItem(
+    phrase: ClipboardPhraseEntity,
+    modifier: GlanceModifier = GlanceModifier,
+    contentMaxLines: Int,
+) {
+    Column(
+        modifier = modifier
+            .background(WidgetColors.itemSurface)
+            .clickable(
+                actionRunCallback<CopyPhraseToClipboardAction>(
+                    actionParametersOf(WidgetActionKeys.phraseId to phrase.id)
+                )
+            )
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        Text(
+            text = phrase.title,
+            style = TextStyle(
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+            ),
+            maxLines = 1,
+        )
+        Spacer(modifier = GlanceModifier.height(2.dp))
+        Text(
+            text = phrase.content,
+            style = TextStyle(
+                fontSize = 11.sp,
+                color = ColorProvider(WidgetColors.subtleText),
+            ),
+            maxLines = contentMaxLines,
+        )
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun EmptyWidgetMessage(
+    text: String,
+    action: Action,
+) {
+    Text(
+        text = text,
+        modifier = GlanceModifier
+            .fillMaxWidth()
+            .background(WidgetColors.surface)
+            .clickable(action)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        style = TextStyle(
+            fontSize = 12.sp,
+            color = ColorProvider(WidgetColors.subtleText),
+        ),
+        maxLines = 3,
+    )
+}
+
+private fun reminderRowCount(heightDp: Float): Int {
+    return when {
+        heightDp >= 360f -> 5
+        heightDp >= 280f -> 4
+        heightDp >= 210f -> 3
+        else -> 2
+    }
+}
+
+private fun clipboardRowCount(heightDp: Float): Int {
+    return when {
+        heightDp >= 360f -> 4
+        heightDp >= 280f -> 3
+        else -> 2
+    }
+}
+
+class SwitchWidgetPageAction : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: androidx.glance.GlanceId,
+        parameters: ActionParameters,
+    ) {
+        val page = parameters[WidgetActionKeys.page] ?: WidgetPage.Reminder.value
+        updateAppWidgetState(context, glanceId) { preferences ->
+            preferences[WidgetStateKeys.currentPage] = page
+        }
+        MyClipboardAppWidget().update(context, glanceId)
+    }
+}
+
+class CopyPhraseToClipboardAction : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: androidx.glance.GlanceId,
+        parameters: ActionParameters,
+    ) {
+        val phraseId = parameters[WidgetActionKeys.phraseId] ?: return
+        val phrase = withContext(Dispatchers.IO) {
+            ClipboardRepository(context).getPhraseById(phraseId)
+        } ?: return
+
+        val clipboardManager = context.getSystemService(ClipboardManager::class.java)
+        clipboardManager.setPrimaryClip(
+            ClipData.newPlainText(phrase.title, phrase.content)
+        )
+
+        val label = phrase.title.ifBlank {
+            phrase.content.lineSequence().firstOrNull().orEmpty().take(24)
+        }
+        Toast.makeText(
+            context,
+            context.getString(R.string.copy_success_message, label),
+            Toast.LENGTH_SHORT,
+        ).show()
+
+        MyClipboardAppWidget().update(context, glanceId)
+    }
+}
+
+class RefreshWidgetAction : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: androidx.glance.GlanceId,
+        parameters: ActionParameters,
+    ) {
+        MyClipboardAppWidget().update(context, glanceId)
+    }
+}
