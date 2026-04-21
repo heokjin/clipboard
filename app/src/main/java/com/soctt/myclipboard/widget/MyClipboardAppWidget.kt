@@ -3,7 +3,11 @@ package com.soctt.myclipboard.widget
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.util.Log
 import android.widget.Toast
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,6 +52,8 @@ import com.soctt.myclipboard.data.local.ReminderEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+private const val WidgetDebugTag = "WidgetDebug"
+
 class MyClipboardAppWidget : GlanceAppWidget() {
 
     override val stateDefinition = PreferencesGlanceStateDefinition
@@ -73,17 +79,36 @@ class MyClipboardAppWidget : GlanceAppWidget() {
         context: Context,
         id: androidx.glance.GlanceId,
     ) {
+        val reminderRepository = ReminderRepository(context)
+        val clipboardRepository = ClipboardRepository(context)
         val snapshot = withContext(Dispatchers.IO) {
             WidgetSnapshot(
-                reminders = ReminderRepository(context).getRecentReminders(limit = 12),
-                phrases = ClipboardRepository(context).getRecentPhrases(limit = 12),
+                reminders = reminderRepository.getRecentReminders(limit = 12),
+                phrases = clipboardRepository.getRecentPhrases(limit = 12),
             )
         }
+        Log.d(
+            WidgetDebugTag,
+            "MyClipboardAppWidget.provideGlance reminders=${snapshot.reminders.size} phrases=${snapshot.phrases.size} glanceId=$id"
+        )
 
         provideContent {
+            val reminders by reminderRepository.observeRecentReminders(limit = 12)
+                .collectAsState(initial = snapshot.reminders)
+            val phrases by clipboardRepository.observeRecentPhrases(limit = 12)
+                .collectAsState(initial = snapshot.phrases)
+
+            LaunchedEffect(reminders, phrases) {
+                Log.d(
+                    WidgetDebugTag,
+                    "MyClipboardAppWidget.WidgetContent synced reminders=${reminders.size} phrases=${phrases.size}"
+                )
+                MyClipboardWidgetSync.clearDirty("widget_content_synced")
+            }
+
             WidgetContent(
-                reminders = snapshot.reminders,
-                phrases = snapshot.phrases,
+                reminders = reminders,
+                phrases = phrases,
             )
         }
     }
@@ -445,6 +470,7 @@ class SwitchWidgetPageAction : ActionCallback {
         parameters: ActionParameters,
     ) {
         val page = parameters[WidgetActionKeys.page] ?: WidgetPage.Reminder.value
+        Log.d(WidgetDebugTag, "SwitchWidgetPageAction page=$page")
         updateAppWidgetState(context, glanceId) { preferences ->
             preferences[WidgetStateKeys.currentPage] = page
         }
@@ -459,6 +485,7 @@ class CopyPhraseToClipboardAction : ActionCallback {
         parameters: ActionParameters,
     ) {
         val phraseId = parameters[WidgetActionKeys.phraseId] ?: return
+        Log.d(WidgetDebugTag, "CopyPhraseToClipboardAction phraseId=$phraseId")
         val phrase = withContext(Dispatchers.IO) {
             ClipboardRepository(context).getPhraseById(phraseId)
         } ?: return
@@ -487,6 +514,7 @@ class RefreshWidgetAction : ActionCallback {
         glanceId: androidx.glance.GlanceId,
         parameters: ActionParameters,
     ) {
-        MyClipboardAppWidget().update(context, glanceId)
+        Log.d(WidgetDebugTag, "RefreshWidgetAction tapped")
+        MyClipboardWidgetSync.refreshAll(context)
     }
 }

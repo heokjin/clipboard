@@ -25,6 +25,15 @@ interface ReminderDao {
         LIMIT :limit
         """
     )
+    fun observeRecentReminders(limit: Int): Flow<List<ReminderEntity>>
+
+    @Query(
+        """
+        SELECT * FROM reminders
+        ORDER BY updatedAt DESC
+        LIMIT :limit
+        """
+    )
     suspend fun getRecentReminders(limit: Int): List<ReminderEntity>
 
     @Query(

@@ -1,5 +1,7 @@
 package com.soctt.myclipboard.ui
 
+import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -20,6 +22,8 @@ import com.soctt.myclipboard.R
 import com.soctt.myclipboard.data.local.ClipboardPhraseEntity
 import com.soctt.myclipboard.data.local.ReminderEntity
 import kotlinx.coroutines.launch
+
+private const val WidgetDebugTag = "WidgetDebug"
 
 private enum class HomePage(
     val titleRes: Int,
@@ -62,6 +66,11 @@ fun HomeScreen(
     val isEditorVisible = when (currentPage) {
         HomePage.Clipboard -> clipboardUiState.isEditorVisible
         HomePage.Reminder -> reminderUiState.isEditorVisible
+    }
+
+    BackHandler(enabled = currentPage == HomePage.Reminder && reminderUiState.isEditorVisible) {
+        Log.d(WidgetDebugTag, "HomeScreen.BackHandler -> onBackFromReminderEditor")
+        onBackFromReminderEditor()
     }
 
     Scaffold(
@@ -134,7 +143,6 @@ fun HomeScreen(
                         ReminderScreen(
                             uiState = reminderUiState,
                             onReminderInputChange = onReminderInputChange,
-                            onBackFromEditor = onBackFromReminderEditor,
                             onDismissEditor = onDismissReminderEditor,
                             onSaveReminder = onSaveReminder,
                             onEditReminder = onEditReminder,

@@ -28,6 +28,15 @@ interface ClipboardPhraseDao {
         LIMIT :limit
         """
     )
+    fun observeRecentPhrases(limit: Int): Flow<List<ClipboardPhraseEntity>>
+
+    @Query(
+        """
+        SELECT * FROM clipboard_phrases
+        ORDER BY updatedAt DESC
+        LIMIT :limit
+        """
+    )
     suspend fun getRecentPhrases(limit: Int): List<ClipboardPhraseEntity>
 
     @Query(

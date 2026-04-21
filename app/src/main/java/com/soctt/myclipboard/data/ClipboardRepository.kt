@@ -8,15 +8,17 @@ import kotlinx.coroutines.flow.Flow
 
 class ClipboardRepository(
     private val database: ClipboardDatabase,
-    private val appContext: Context? = null,
 ) {
     constructor(context: Context) : this(
         database = ClipboardDatabase.getDatabase(context),
-        appContext = context.applicationContext,
     )
 
     fun observePhrases(query: String): Flow<List<ClipboardPhraseEntity>> {
         return database.clipboardPhraseDao().observePhrases(query.trim())
+    }
+
+    fun observeRecentPhrases(limit: Int): Flow<List<ClipboardPhraseEntity>> {
+        return database.clipboardPhraseDao().observeRecentPhrases(limit)
     }
 
     suspend fun getRecentPhrases(limit: Int): List<ClipboardPhraseEntity> {
@@ -34,7 +36,7 @@ class ClipboardRepository(
                 content = content,
             )
         )
-        appContext?.let { MyClipboardWidgetSync.refreshAll(it) }
+        MyClipboardWidgetSync.markDirty()
     }
 
     suspend fun updatePhrase(id: Long, title: String, content: String) {
@@ -46,11 +48,11 @@ class ClipboardRepository(
                 updatedAt = System.currentTimeMillis(),
             )
         )
-        appContext?.let { MyClipboardWidgetSync.refreshAll(it) }
+        MyClipboardWidgetSync.markDirty()
     }
 
     suspend fun deletePhrase(phrase: ClipboardPhraseEntity) {
         database.clipboardPhraseDao().delete(phrase)
-        appContext?.let { MyClipboardWidgetSync.refreshAll(it) }
+        MyClipboardWidgetSync.markDirty()
     }
 }

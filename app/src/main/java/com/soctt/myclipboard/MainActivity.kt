@@ -3,6 +3,7 @@ package com.soctt.myclipboard
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -32,6 +33,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
+private const val WidgetDebugTag = "WidgetDebug"
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,6 +63,7 @@ private fun MyClipboardApp(
         val context = LocalContext.current
         val appContext = context.applicationContext
         val lifecycleOwner = LocalLifecycleOwner.current
+        val backgroundScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
         val repository = remember(appContext) {
             ClipboardRepository(appContext)
         }
@@ -97,13 +101,15 @@ private fun MyClipboardApp(
             clipboardViewModel,
             reminderViewModel,
         ) {
-            val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
             val observer = LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_PAUSE) {
+                if (event == Lifecycle.Event.ON_STOP) {
+                    Log.d(WidgetDebugTag, "MainActivity lifecycle ON_STOP -> persist editors and refresh widget if dirty")
                     backgroundScope.launch {
+                        Log.d(WidgetDebugTag, "MainActivity ON_STOP coroutine started")
                         clipboardViewModel.persistEditorIfNeeded()
                         reminderViewModel.persistEditorIfNeeded()
-                        MyClipboardWidgetSync.refreshAll(appContext)
+                        MyClipboardWidgetSync.refreshIfDirty(appContext)
+                        Log.d(WidgetDebugTag, "MainActivity ON_STOP coroutine finished")
                     }
                 }
             }

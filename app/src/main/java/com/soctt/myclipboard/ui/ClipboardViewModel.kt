@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.soctt.myclipboard.data.ClipboardRepository
 import com.soctt.myclipboard.data.local.ClipboardPhraseEntity
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -26,6 +27,7 @@ class ClipboardViewModel(
 
     private val searchQuery = MutableStateFlow("")
     private val editorState = MutableStateFlow(EditorState())
+    private var saveJob: Job? = null
     private val _copySuccessMessages = MutableSharedFlow<String>(extraBufferCapacity = 1)
 
     private val phrases = searchQuery.flatMapLatest { query ->
@@ -93,16 +95,21 @@ class ClipboardViewModel(
         val editor = editorState.value
         val title = editor.titleInput.trim()
         val content = editor.contentInput.trim()
-        if (title.isBlank() || content.isBlank()) {
+        if (title.isBlank() || content.isBlank() || saveJob?.isActive == true) {
             return
         }
 
-        viewModelScope.launch {
-            saveEditor(editor, dismissWhenUnchanged = true)
+        saveJob = viewModelScope.launch {
+            try {
+                saveEditor(editor, dismissWhenUnchanged = true)
+            } finally {
+                saveJob = null
+            }
         }
     }
 
     suspend fun persistEditorIfNeeded() {
+        saveJob?.join()
         val editor = editorState.value
         if (!editor.isVisible) {
             return

@@ -1,6 +1,6 @@
 package com.soctt.myclipboard.ui
 
-import androidx.activity.compose.BackHandler
+import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -24,6 +24,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,12 +42,12 @@ import kotlinx.coroutines.launch
 
 private const val ReminderDeleteHoldMillis = 1_000L
 private const val ReminderDeleteProgressResetMillis = 140
+private const val WidgetDebugTag = "WidgetDebug"
 
 @Composable
 fun ReminderScreen(
     uiState: ReminderUiState,
     onReminderInputChange: (String) -> Unit,
-    onBackFromEditor: () -> Unit,
     onDismissEditor: () -> Unit,
     onSaveReminder: () -> Unit,
     onEditReminder: (ReminderEntity) -> Unit,
@@ -57,7 +58,6 @@ fun ReminderScreen(
         ReminderEditorScreen(
             uiState = uiState,
             onReminderInputChange = onReminderInputChange,
-            onBack = onBackFromEditor,
             onDismiss = onDismissEditor,
             onConfirm = onSaveReminder,
             modifier = modifier,
@@ -214,13 +214,17 @@ private fun ReminderCard(
 private fun ReminderEditorScreen(
     uiState: ReminderUiState,
     onReminderInputChange: (String) -> Unit,
-    onBack: () -> Unit,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val isEditing = uiState.editingReminderId != null
-    BackHandler(onBack = onBack)
+    LaunchedEffect(uiState.editingReminderId) {
+        Log.d(
+            WidgetDebugTag,
+            "ReminderEditorScreen opened editingId=${uiState.editingReminderId} input='${uiState.reminderInput.trim().take(24)}'"
+        )
+    }
 
     Column(
         modifier = modifier
