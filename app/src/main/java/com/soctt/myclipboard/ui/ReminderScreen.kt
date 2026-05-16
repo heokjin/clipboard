@@ -36,11 +36,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import com.soctt.myclipboard.R
 import com.soctt.myclipboard.data.local.ReminderEntity
 import kotlinx.coroutines.launch
 
-private const val ReminderDeleteHoldMillis = 1_000L
+private const val ReminderDeleteIntentMillis = 420L
+private const val ReminderDeleteHoldMillis = 700L
 private const val ReminderDeleteProgressResetMillis = 140
 private const val WidgetDebugTag = "WidgetDebug"
 
@@ -152,10 +154,13 @@ private fun ReminderCard(
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
                     var didDelete = false
-                    isShowingDeleteProgress = true
+                    var isDeleteMode = false
 
                     val progressJob = coroutineScope.launch {
                         deleteProgress.snapTo(0f)
+                        delay(ReminderDeleteIntentMillis)
+                        isDeleteMode = true
+                        isShowingDeleteProgress = true
                         deleteProgress.animateTo(
                             targetValue = 1f,
                             animationSpec = tween(durationMillis = ReminderDeleteHoldMillis.toInt()),
@@ -176,7 +181,7 @@ private fun ReminderCard(
                                 animationSpec = tween(durationMillis = ReminderDeleteProgressResetMillis),
                             )
                         }
-                        if (up != null) {
+                        if (up != null && !isDeleteMode) {
                             onEditReminder(reminder)
                         }
                     }
