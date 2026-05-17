@@ -3,6 +3,7 @@ package com.soctt.myclipboard.widget
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.runtime.LaunchedEffect
@@ -26,6 +27,8 @@ import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.lazy.LazyColumn
+import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.background
@@ -33,6 +36,7 @@ import androidx.glance.currentState
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -53,27 +57,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private const val WidgetDebugTag = "WidgetDebug"
+private const val WidgetReminderDataLimit = 40
+private const val WidgetClipboardDataLimit = 24
 
 class MyClipboardAppWidget : GlanceAppWidget() {
 
     override val stateDefinition = PreferencesGlanceStateDefinition
 
-    override val sizeMode: SizeMode = SizeMode.Responsive(
-        setOf(
-            androidx.compose.ui.unit.DpSize(180.dp, 150.dp),
-            androidx.compose.ui.unit.DpSize(250.dp, 150.dp),
-            androidx.compose.ui.unit.DpSize(400.dp, 150.dp),
-            androidx.compose.ui.unit.DpSize(180.dp, 230.dp),
-            androidx.compose.ui.unit.DpSize(250.dp, 230.dp),
-            androidx.compose.ui.unit.DpSize(400.dp, 230.dp),
-            androidx.compose.ui.unit.DpSize(180.dp, 320.dp),
-            androidx.compose.ui.unit.DpSize(250.dp, 320.dp),
-            androidx.compose.ui.unit.DpSize(400.dp, 320.dp),
-            androidx.compose.ui.unit.DpSize(320.dp, 150.dp),
-            androidx.compose.ui.unit.DpSize(320.dp, 230.dp),
-            androidx.compose.ui.unit.DpSize(320.dp, 320.dp),
-        )
-    )
+    override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(
         context: Context,
@@ -83,8 +74,8 @@ class MyClipboardAppWidget : GlanceAppWidget() {
         val clipboardRepository = ClipboardRepository(context)
         val snapshot = withContext(Dispatchers.IO) {
             WidgetSnapshot(
-                reminders = reminderRepository.getRecentReminders(limit = 12),
-                phrases = clipboardRepository.getRecentPhrases(limit = 12),
+                reminders = reminderRepository.getRecentReminders(limit = WidgetReminderDataLimit),
+                phrases = clipboardRepository.getRecentPhrases(limit = WidgetClipboardDataLimit),
             )
         }
         Log.d(
@@ -93,9 +84,9 @@ class MyClipboardAppWidget : GlanceAppWidget() {
         )
 
         provideContent {
-            val reminders by reminderRepository.observeRecentReminders(limit = 12)
+            val reminders by reminderRepository.observeRecentReminders(limit = WidgetReminderDataLimit)
                 .collectAsState(initial = snapshot.reminders)
-            val phrases by clipboardRepository.observeRecentPhrases(limit = 12)
+            val phrases by clipboardRepository.observeRecentPhrases(limit = WidgetClipboardDataLimit)
                 .collectAsState(initial = snapshot.phrases)
 
             LaunchedEffect(reminders, phrases) {
@@ -165,7 +156,19 @@ private fun WidgetContent(
     val preferences = currentState<Preferences>()
     val currentPage = WidgetPage.fromValue(preferences[WidgetStateKeys.currentPage])
     val size = LocalSize.current
-    val isWide = size.width.value >= 360f
+    val isWide = size.width.value >= 300f
+    val reminderRows = reminderRowCount(
+        heightDp = size.height.value,
+        columns = if (isWide) 2 else 1,
+    )
+    val clipboardRows = clipboardRowCount(
+        heightDp = size.height.value,
+        columns = if (isWide) 2 else 1,
+    )
+    Log.d(
+        WidgetDebugTag,
+        "WidgetContent size width=${size.width.value} height=${size.height.value} page=${currentPage.value} reminderRows=$reminderRows clipboardRows=$clipboardRows"
+    )
     val openCurrentPageAction = actionStartActivity<MainActivity>(
         actionParametersOf(WidgetActionKeys.startPage to currentPage.value)
     )
@@ -203,7 +206,11 @@ private fun WidgetContent(
                 )
             }
 
-            Spacer(modifier = GlanceModifier.defaultWeight())
+            Spacer(
+                modifier = GlanceModifier
+                    .defaultWeight()
+                    .clickable(openCurrentPageAction)
+            )
 
             Image(
                 provider = androidx.glance.ImageProvider(R.drawable.ic_widget_refresh),
@@ -225,13 +232,13 @@ private fun WidgetContent(
             when (currentPage) {
                 WidgetPage.Reminder -> ReminderWidgetList(
                     reminders = reminders,
-                    rows = reminderRowCount(size.height.value),
+                    maxVisibleItems = reminderRows * if (isWide) 2 else 1,
                     columns = if (isWide) 2 else 1,
                 )
 
                 WidgetPage.Clipboard -> ClipboardWidgetList(
                     phrases = phrases,
-                    rows = clipboardRowCount(size.height.value),
+                    maxVisibleItems = clipboardRows * if (isWide) 2 else 1,
                     columns = if (isWide) 2 else 1,
                     isWide = isWide,
                 )
@@ -274,7 +281,7 @@ private fun WidgetTabChip(
 @androidx.compose.runtime.Composable
 private fun ReminderWidgetList(
     reminders: List<ReminderEntity>,
-    rows: Int,
+    maxVisibleItems: Int,
     columns: Int,
 ) {
     val context = androidx.glance.LocalContext.current
@@ -289,32 +296,60 @@ private fun ReminderWidgetList(
         return
     }
 
-    val visibleItems = reminders.take(rows * columns)
-    Column(modifier = GlanceModifier.fillMaxSize()) {
-        visibleItems.chunked(columns).forEachIndexed { index, rowItems ->
-            Row(modifier = GlanceModifier.fillMaxWidth()) {
-                rowItems.forEachIndexed { itemIndex, reminder ->
-                    ReminderWidgetItem(
-                        reminder = reminder,
-                        modifier = if (columns > 1) {
-                            GlanceModifier.defaultWeight()
-                        } else {
-                            GlanceModifier.fillMaxWidth()
-                        },
-                    )
-                    if (columns > 1 && itemIndex != rowItems.lastIndex) {
-                        Spacer(modifier = GlanceModifier.width(6.dp))
-                    }
-                }
-                if (columns > 1 && rowItems.size < columns) {
-                    Spacer(modifier = GlanceModifier.defaultWeight())
-                }
-            }
-            if (index != visibleItems.chunked(columns).lastIndex) {
-                Spacer(modifier = GlanceModifier.height(6.dp))
+    val visibleItems = reminders.take(maxVisibleItems)
+    val rows = visibleItems.chunked(columns)
+    if (rows.size <= 10) {
+        Column(modifier = GlanceModifier.fillMaxSize()) {
+            rows.forEachIndexed { rowIndex, rowItems ->
+                ReminderWidgetRow(
+                    rowItems = rowItems,
+                    columns = columns,
+                    modifier = GlanceModifier
+                        .fillMaxWidth()
+                        .defaultWeight()
+                        .padding(bottom = if (rowIndex == rows.lastIndex) 0.dp else 6.dp),
+                )
             }
         }
-        Spacer(modifier = GlanceModifier.defaultWeight())
+        return
+    }
+
+    LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
+        items(rows) { rowItems ->
+            ReminderWidgetRow(
+                rowItems = rowItems,
+                columns = columns,
+                modifier = GlanceModifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp),
+            )
+        }
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun ReminderWidgetRow(
+    rowItems: List<ReminderEntity>,
+    columns: Int,
+    modifier: GlanceModifier = GlanceModifier,
+) {
+    Row(modifier = modifier) {
+        rowItems.forEachIndexed { itemIndex, reminder ->
+            ReminderWidgetItem(
+                reminder = reminder,
+                modifier = if (columns > 1) {
+                    GlanceModifier.defaultWeight().fillMaxHeight()
+                } else {
+                    GlanceModifier.fillMaxSize()
+                },
+            )
+            if (columns > 1 && itemIndex != rowItems.lastIndex) {
+                Spacer(modifier = GlanceModifier.width(6.dp))
+            }
+        }
+        if (columns > 1 && rowItems.size < columns) {
+            Spacer(modifier = GlanceModifier.defaultWeight())
+        }
     }
 }
 
@@ -344,7 +379,7 @@ private fun ReminderWidgetItem(
 @androidx.compose.runtime.Composable
 private fun ClipboardWidgetList(
     phrases: List<ClipboardPhraseEntity>,
-    rows: Int,
+    maxVisibleItems: Int,
     columns: Int,
     isWide: Boolean,
 ) {
@@ -360,34 +395,87 @@ private fun ClipboardWidgetList(
         return
     }
 
-    val visibleItems = phrases.take(rows * columns)
-    Column(modifier = GlanceModifier.fillMaxSize()) {
-        visibleItems.chunked(columns).forEachIndexed { index, rowItems ->
-            Row(modifier = GlanceModifier.fillMaxWidth()) {
-                rowItems.forEachIndexed { itemIndex, phrase ->
-                    ClipboardWidgetItem(
-                        phrase = phrase,
-                        modifier = if (columns > 1) {
-                            GlanceModifier.defaultWeight()
-                        } else {
-                            GlanceModifier.fillMaxWidth()
-                        },
-                        contentMaxLines = if (isWide) 2 else 1,
-                    )
-                    if (columns > 1 && itemIndex != rowItems.lastIndex) {
-                        Spacer(modifier = GlanceModifier.width(6.dp))
-                    }
-                }
-                if (columns > 1 && rowItems.size < columns) {
-                    Spacer(modifier = GlanceModifier.defaultWeight())
-                }
-            }
-            if (index != visibleItems.chunked(columns).lastIndex) {
-                Spacer(modifier = GlanceModifier.height(6.dp))
+    val visibleItems = phrases.take(maxVisibleItems)
+    val rows = visibleItems.chunked(columns)
+    if (rows.size <= 10) {
+        Column(modifier = GlanceModifier.fillMaxSize()) {
+            rows.forEachIndexed { rowIndex, rowItems ->
+                ClipboardWidgetRow(
+                    rowItems = rowItems,
+                    columns = columns,
+                    isWide = isWide,
+                    modifier = GlanceModifier
+                        .fillMaxWidth()
+                        .defaultWeight()
+                        .padding(bottom = if (rowIndex == rows.lastIndex) 0.dp else 6.dp),
+                )
             }
         }
-        Spacer(modifier = GlanceModifier.defaultWeight())
+        return
     }
+
+    LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
+        items(rows) { rowItems ->
+            ClipboardWidgetRow(
+                rowItems = rowItems,
+                columns = columns,
+                isWide = isWide,
+                modifier = GlanceModifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp),
+            )
+        }
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun ClipboardWidgetRow(
+    rowItems: List<ClipboardPhraseEntity>,
+    columns: Int,
+    isWide: Boolean,
+    modifier: GlanceModifier = GlanceModifier,
+) {
+    Row(modifier = modifier) {
+        rowItems.forEachIndexed { itemIndex, phrase ->
+            ClipboardWidgetItem(
+                phrase = phrase,
+                modifier = if (columns > 1) {
+                    GlanceModifier.defaultWeight().fillMaxHeight()
+                } else {
+                    GlanceModifier.fillMaxSize()
+                },
+                contentMaxLines = if (isWide) 2 else 1,
+            )
+            if (columns > 1 && itemIndex != rowItems.lastIndex) {
+                Spacer(modifier = GlanceModifier.width(6.dp))
+            }
+        }
+        if (columns > 1 && rowItems.size < columns) {
+            Spacer(modifier = GlanceModifier.defaultWeight())
+        }
+    }
+}
+
+private fun reminderRowCount(
+    heightDp: Float,
+    columns: Int,
+): Int {
+    val reservedHeight = 78f
+    val rowHeight = if (columns > 1) 60f else 66f
+    val rowGap = 6f
+    val availableHeight = (heightDp - reservedHeight).coerceAtLeast(rowHeight)
+    return (((availableHeight + rowGap) / (rowHeight + rowGap)).toInt()).coerceIn(2, 12)
+}
+
+private fun clipboardRowCount(
+    heightDp: Float,
+    columns: Int,
+): Int {
+    val reservedHeight = 78f
+    val rowHeight = if (columns > 1) 62f else 70f
+    val rowGap = 6f
+    val availableHeight = (heightDp - reservedHeight).coerceAtLeast(rowHeight)
+    return (((availableHeight + rowGap) / (rowHeight + rowGap)).toInt()).coerceIn(2, 8)
 }
 
 @androidx.compose.runtime.Composable
@@ -446,23 +534,6 @@ private fun EmptyWidgetMessage(
     )
 }
 
-private fun reminderRowCount(heightDp: Float): Int {
-    return when {
-        heightDp >= 360f -> 5
-        heightDp >= 280f -> 4
-        heightDp >= 210f -> 3
-        else -> 2
-    }
-}
-
-private fun clipboardRowCount(heightDp: Float): Int {
-    return when {
-        heightDp >= 360f -> 4
-        heightDp >= 280f -> 3
-        else -> 2
-    }
-}
-
 class SwitchWidgetPageAction : ActionCallback {
     override suspend fun onAction(
         context: Context,
@@ -498,11 +569,15 @@ class CopyPhraseToClipboardAction : ActionCallback {
         val label = phrase.title.ifBlank {
             phrase.content.lineSequence().firstOrNull().orEmpty().take(24)
         }
-        Toast.makeText(
-            context,
-            context.getString(R.string.copy_success_message, label),
-            Toast.LENGTH_SHORT,
-        ).show()
+        withContext(Dispatchers.Main.immediate) {
+            if (Looper.myLooper() != null) {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.copy_success_message, label),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
 
         MyClipboardAppWidget().update(context, glanceId)
     }
