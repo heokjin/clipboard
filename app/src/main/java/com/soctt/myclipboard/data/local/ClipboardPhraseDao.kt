@@ -16,10 +16,15 @@ interface ClipboardPhraseDao {
         WHERE :query = ''
             OR title LIKE '%' || :query || '%'
             OR content LIKE '%' || :query || '%'
-        ORDER BY updatedAt DESC
+        ORDER BY
+            CASE WHEN :pinFavoritesToTop THEN isFavorite ELSE 0 END DESC,
+            updatedAt DESC
         """
     )
-    fun observePhrases(query: String): Flow<List<ClipboardPhraseEntity>>
+    fun observePhrases(
+        query: String,
+        pinFavoritesToTop: Boolean,
+    ): Flow<List<ClipboardPhraseEntity>>
 
     @Query(
         """
@@ -48,6 +53,15 @@ interface ClipboardPhraseDao {
     )
     suspend fun getPhraseById(id: Long): ClipboardPhraseEntity?
 
+    @Query(
+        """
+        SELECT * FROM clipboard_phrases
+        WHERE content = :content
+        LIMIT 1
+        """
+    )
+    suspend fun getPhraseByContent(content: String): ClipboardPhraseEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(phrase: ClipboardPhraseEntity): Long
 
@@ -56,4 +70,7 @@ interface ClipboardPhraseDao {
 
     @Delete
     suspend fun delete(phrase: ClipboardPhraseEntity)
+
+    @Query("DELETE FROM clipboard_phrases")
+    suspend fun deleteAll()
 }

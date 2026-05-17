@@ -1,40 +1,109 @@
 package com.soctt.myclipboard.ui
 
 import android.util.Log
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.soctt.myclipboard.data.ReminderRepository
+import com.soctt.myclipboard.data.ReminderSettingsRepository
 import com.soctt.myclipboard.data.local.ReminderEntity
+import com.soctt.myclipboard.reminder.ReminderStyleSpan
+import com.soctt.myclipboard.reminder.adjustReminderSpansForTextChange
+import com.soctt.myclipboard.reminder.encodeReminderStyleSpans
+import com.soctt.myclipboard.reminder.styleSpans
+import com.soctt.myclipboard.reminder.summarizeReminderSelectionStyle
+import com.soctt.myclipboard.reminder.toggleReminderHighlightOnSelection
+import com.soctt.myclipboard.reminder.trimReminderTextAndSpans
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 private const val WidgetDebugTag = "WidgetDebug"
 
+private fun mergedSelectionCandidate(
+    current: TextRange?,
+    previous: TextRange?,
+): TextRange? {
+    return when {
+        current == null -> previous
+        previous == null -> current
+        current.canMergeWith(previous) -> TextRange(
+            start = minOf(current.start, previous.start),
+            end = maxOf(current.end, previous.end),
+        )
+        else -> current
+    }
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
 class ReminderViewModel(
     private val repository: ReminderRepository,
+    private val settingsRepository: ReminderSettingsRepository,
 ) : ViewModel() {
 
-    private val editorState = kotlinx.coroutines.flow.MutableStateFlow(EditorState())
+    private val searchQuery = MutableStateFlow("")
+    private val scrollToTopTick = MutableStateFlow(0)
+    private val editorState = MutableStateFlow(EditorState())
+    private val isSettingsVisible = MutableStateFlow(false)
     private var saveJob: Job? = null
-    private val reminders = repository.observeReminders()
+    private val _deletedReminderEvents = MutableSharedFlow<ReminderEntity>(extraBufferCapacity = 1)
+    private val reminders = combine(
+        searchQuery,
+        settingsRepository.settings,
+    ) { query, settings ->
+        query to settings.pinImportantToTop
+    }.flatMapLatest { (query, pinImportantToTop) ->
+        repository.observeReminders(
+            query = query,
+            pinImportantToTop = pinImportantToTop,
+        )
+    }
+    private val settingsUiState = combine(
+        settingsRepository.settings,
+        isSettingsVisible,
+    ) { settings, isSettingsVisible ->
+        settings to isSettingsVisible
+    }
 
     val uiState: StateFlow<ReminderUiState> = combine(
+        searchQuery,
+        scrollToTopTick,
         reminders,
         editorState,
-    ) { reminders, editor ->
+        settingsUiState,
+    ) { query, scrollTick, reminders, editor, settingsUiState ->
+        val (settings, isSettingsVisible) = settingsUiState
         ReminderUiState(
+            searchQuery = query,
+            scrollToTopTick = scrollTick,
             reminders = reminders,
+            showWritingHint = settings.showWritingHint,
+            pinImportantToTop = settings.pinImportantToTop,
+            previewLineCount = settings.previewLineCount,
+            isSettingsVisible = isSettingsVisible,
             isEditorVisible = editor.isVisible,
             editingReminderId = editor.editingReminderId,
-            reminderInput = editor.input,
-            isSaveEnabled = editor.input.isNotBlank(),
+            reminderInputValue = editor.inputValue,
+            reminderStyleSpans = editor.styleSpans,
+            selectionStyle = summarizeReminderSelectionStyle(
+                text = editor.inputValue.text,
+                spans = editor.styleSpans,
+                selection = editor.activeSelection(),
+            ),
+            isSaveEnabled = editor.inputValue.text.isNotBlank(),
         )
     }.stateIn(
         scope = viewModelScope,
@@ -42,10 +111,16 @@ class ReminderViewModel(
         initialValue = ReminderUiState(),
     )
 
+    val deletedReminderEvents: SharedFlow<ReminderEntity> = _deletedReminderEvents.asSharedFlow()
+
+    fun onSearchQueryChange(query: String) {
+        searchQuery.value = query
+    }
+
     fun showAddDialog() {
         editorState.value = EditorState(
             isVisible = true,
-            originalInput = "",
+            originalText = "",
         )
     }
 
@@ -53,16 +128,42 @@ class ReminderViewModel(
         editorState.value = EditorState()
     }
 
+    fun showSettings() {
+        isSettingsVisible.value = true
+    }
+
+    fun dismissSettings() {
+        isSettingsVisible.value = false
+    }
+
+    fun setShowWritingHint(enabled: Boolean) {
+        settingsRepository.setShowWritingHint(enabled)
+    }
+
+    fun setPinImportantToTop(enabled: Boolean) {
+        settingsRepository.setPinImportantToTop(enabled)
+    }
+
+    fun setPreviewLineCount(lineCount: Int) {
+        settingsRepository.setPreviewLineCount(lineCount)
+    }
+
     fun handleEditorBack() {
         val editor = editorState.value
-        val trimmedInput = editor.input.trim()
-        val trimmedOriginal = editor.originalInput.trim()
+        val (trimmedInput, trimmedSpans) = trimReminderTextAndSpans(
+            text = editor.inputValue.text,
+            spans = editor.styleSpans,
+        )
+        val (trimmedOriginal, trimmedOriginalSpans) = trimReminderTextAndSpans(
+            text = editor.originalText,
+            spans = editor.originalStyleSpans,
+        )
         Log.d(
             WidgetDebugTag,
             "ReminderViewModel.handleEditorBack input='${trimmedInput.take(24)}' original='${trimmedOriginal.take(24)}' editingId=${editor.editingReminderId}"
         )
 
-        if (trimmedInput.isBlank() || trimmedInput == trimmedOriginal) {
+        if (trimmedInput.isBlank() || (trimmedInput == trimmedOriginal && trimmedSpans == trimmedOriginalSpans)) {
             Log.d(WidgetDebugTag, "ReminderViewModel.handleEditorBack -> dismiss only")
             dismissEditor()
             return
@@ -72,16 +173,45 @@ class ReminderViewModel(
         saveReminder()
     }
 
-    fun onReminderInputChange(text: String) {
-        editorState.value = editorState.value.copy(input = text)
+    fun onReminderInputChange(inputValue: TextFieldValue) {
+        val previous = editorState.value
+        val nextSpans = adjustReminderSpansForTextChange(
+            oldText = previous.inputValue.text,
+            newText = inputValue.text,
+            spans = previous.styleSpans,
+        )
+        val nextSelection = mergedSelectionCandidate(
+            current = inputValue.selection.takeIf { !it.collapsed },
+            previous = previous.lastNonCollapsedSelection,
+        )
+        editorState.value = previous.copy(
+            inputValue = inputValue,
+            styleSpans = nextSpans,
+            lastNonCollapsedSelection = nextSelection,
+            lastComposition = inputValue.composition ?: previous.lastComposition,
+        )
+    }
+
+    fun toggleHighlightOnSelection() {
+        val editor = editorState.value
+        editorState.value = editor.copy(
+            styleSpans = toggleReminderHighlightOnSelection(
+                text = editor.inputValue.text,
+                spans = editor.styleSpans,
+                selection = editor.activeSelection(),
+            )
+        )
     }
 
     fun startEdit(reminder: ReminderEntity) {
         editorState.value = EditorState(
             isVisible = true,
             editingReminderId = reminder.id,
-            input = reminder.text,
-            originalInput = reminder.text,
+            inputValue = TextFieldValue(reminder.text),
+            originalText = reminder.text,
+            styleSpans = reminder.styleSpans(),
+            originalStyleSpans = reminder.styleSpans(),
+            lastNonCollapsedSelection = null,
         )
     }
 
@@ -95,7 +225,10 @@ class ReminderViewModel(
 
     fun saveReminder() {
         val editor = editorState.value
-        val text = editor.input.trim()
+        val (text, _) = trimReminderTextAndSpans(
+            text = editor.inputValue.text,
+            spans = editor.styleSpans,
+        )
         if (text.isBlank() || saveJob?.isActive == true) {
             Log.d(
                 WidgetDebugTag,
@@ -137,14 +270,44 @@ class ReminderViewModel(
             if (editorState.value.editingReminderId == reminder.id) {
                 dismissEditor()
             }
+            _deletedReminderEvents.tryEmit(reminder)
+        }
+    }
+
+    fun setReminderImportant(reminder: ReminderEntity, isImportant: Boolean) {
+        viewModelScope.launch {
+            repository.setReminderImportant(
+                id = reminder.id,
+                isImportant = isImportant,
+            )
+        }
+    }
+
+    fun deleteAllReminders() {
+        viewModelScope.launch {
+            repository.deleteAllReminders()
+            dismissEditor()
+        }
+    }
+
+    fun restoreReminder(reminder: ReminderEntity) {
+        viewModelScope.launch {
+            repository.restoreReminder(reminder)
+            scrollToTopTick.value += 1
         }
     }
 
     companion object {
-        fun factory(repository: ReminderRepository): ViewModelProvider.Factory {
+        fun factory(
+            repository: ReminderRepository,
+            settingsRepository: ReminderSettingsRepository,
+        ): ViewModelProvider.Factory {
             return viewModelFactory {
                 initializer {
-                    ReminderViewModel(repository)
+                    ReminderViewModel(
+                        repository = repository,
+                        settingsRepository = settingsRepository,
+                    )
                 }
             }
         }
@@ -153,22 +316,51 @@ class ReminderViewModel(
     private data class EditorState(
         val isVisible: Boolean = false,
         val editingReminderId: Long? = null,
-        val input: String = "",
-        val originalInput: String = "",
-    )
+        val inputValue: TextFieldValue = TextFieldValue(""),
+        val originalText: String = "",
+        val styleSpans: List<ReminderStyleSpan> = emptyList(),
+        val originalStyleSpans: List<ReminderStyleSpan> = emptyList(),
+        val lastNonCollapsedSelection: TextRange? = null,
+        val lastComposition: TextRange? = null,
+    ) {
+        fun activeSelection(): TextRange {
+            val currentSelection = inputValue.selection.takeIf { !it.collapsed }
+            val baseSelection = mergedSelectionCandidate(
+                current = currentSelection,
+                previous = lastNonCollapsedSelection,
+            ) ?: inputValue.selection
+            val composition = inputValue.composition ?: lastComposition
+            return if (composition != null && baseSelection.canMergeWith(composition)) {
+                TextRange(
+                    start = minOf(baseSelection.start, composition.start),
+                    end = maxOf(baseSelection.end, composition.end),
+                )
+            } else {
+                baseSelection
+            }
+        }
+    }
 
     private suspend fun saveEditor(
         editor: EditorState,
         dismissWhenUnchanged: Boolean,
     ) {
-        val text = editor.input.trim()
+        val (text, styleSpans) = trimReminderTextAndSpans(
+            text = editor.inputValue.text,
+            spans = editor.styleSpans,
+        )
         if (text.isBlank()) {
             Log.d(WidgetDebugTag, "ReminderViewModel.saveEditor skipped because blank")
             return
         }
 
+        val (originalText, originalStyleSpans) = trimReminderTextAndSpans(
+            text = editor.originalText,
+            spans = editor.originalStyleSpans,
+        )
         val hasChanges = editor.editingReminderId == null ||
-            text != editor.originalInput.trim()
+            text != originalText ||
+            styleSpans != originalStyleSpans
         Log.d(
             WidgetDebugTag,
             "ReminderViewModel.saveEditor editingId=${editor.editingReminderId} hasChanges=$hasChanges dismissWhenUnchanged=$dismissWhenUnchanged"
@@ -183,14 +375,23 @@ class ReminderViewModel(
         }
 
         val editingReminderId = editor.editingReminderId
+        val styleSpansJson = encodeReminderStyleSpans(styleSpans)
         if (editingReminderId == null) {
             Log.d(WidgetDebugTag, "ReminderViewModel.saveEditor -> addReminder")
-            repository.addReminder(text)
+            repository.addReminder(text, styleSpansJson)
         } else {
             Log.d(WidgetDebugTag, "ReminderViewModel.saveEditor -> updateReminder id=$editingReminderId")
-            repository.updateReminder(editingReminderId, text)
+            repository.updateReminder(editingReminderId, text, styleSpansJson)
         }
         dismissEditor()
         Log.d(WidgetDebugTag, "ReminderViewModel.saveEditor -> dismissEditor")
     }
+}
+
+private fun TextRange.canMergeWith(other: TextRange): Boolean {
+    val rangeStart = minOf(this.start, this.end)
+    val rangeEnd = maxOf(this.start, this.end)
+    val otherStart = minOf(other.start, other.end)
+    val otherEnd = maxOf(other.start, other.end)
+    return otherStart <= rangeEnd && otherEnd >= rangeStart
 }

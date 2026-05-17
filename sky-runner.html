@@ -1,0 +1,2145 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dino Egg Run</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      overscroll-behavior: none;
+      background: #071522;
+      color: white;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      touch-action: none;
+    }
+    .hud {
+      position: fixed;
+      left: 16px;
+      top: 16px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: rgba(8, 18, 32, .74);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, .18);
+      user-select: none;
+    }
+    .title {
+      margin: 0 0 4px;
+      font-size: 18px;
+      font-weight: 800;
+    }
+    .score, .status {
+      margin: 0;
+      font-size: 13px;
+      color: #e6f6ff;
+    }
+    .status {
+      color: #ffd166;
+      font-weight: 800;
+    }
+    .jumpGauge {
+      width: 128px;
+      height: 8px;
+      margin-top: 8px;
+      border-radius: 999px;
+      background: rgba(80, 103, 130, .46);
+      overflow: hidden;
+      display: none;
+    }
+    .jumpGaugeFill {
+      width: 0%;
+      height: 100%;
+      border-radius: 999px;
+      background: #e85d75;
+      transition: width .06s linear, background-color .12s linear;
+    }
+    .tongueGaugeFill {
+      width: 0%;
+      height: 100%;
+      border-radius: 999px;
+      background: #7fdca1;
+      transition: width .06s linear, background-color .12s linear;
+    }
+    .controls {
+      position: fixed;
+      left: 18px;
+      right: 18px;
+      bottom: 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      pointer-events: none;
+    }
+    .cluster, .actions {
+      display: flex;
+      gap: 10px;
+      pointer-events: auto;
+    }
+    .rightControls {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      pointer-events: auto;
+    }
+    button {
+      border: 0;
+      border-radius: 8px;
+      color: white;
+      background: rgba(22, 40, 61, .86);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, .2);
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+      user-select: none;
+    }
+    .move {
+      width: 64px;
+      height: 64px;
+      font-size: 26px;
+    }
+    .reset {
+      width: 84px;
+      height: 40px;
+      margin-bottom: 10px;
+      background: rgba(36, 59, 83, .88);
+      font-size: 14px;
+    }
+    .transform, .tongue, .jump {
+      width: 82px;
+      height: 58px;
+    }
+    .transform { background: #3d89d6; }
+    .tongue { background: #39a66b; }
+    .jump { background: #e85d75; }
+    .warpModal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(5, 10, 18, .62);
+      backdrop-filter: blur(8px);
+      z-index: 20;
+      padding: 20px;
+    }
+    .warpPanel {
+      width: min(420px, 100%);
+      border-radius: 8px;
+      background: rgba(12, 23, 39, .94);
+      box-shadow: 0 20px 48px rgba(0, 0, 0, .28);
+      padding: 18px;
+    }
+    .warpTitle {
+      margin: 0 0 6px;
+      font-size: 18px;
+      font-weight: 800;
+    }
+    .warpBody {
+      margin: 0 0 14px;
+      font-size: 13px;
+      color: #e6f6ff;
+    }
+    .warpGrid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .warpStage {
+      height: 42px;
+      background: #2a4965;
+      font-size: 14px;
+    }
+    .warpCancel {
+      width: 100%;
+      height: 42px;
+      margin-top: 12px;
+      background: #6a3140;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div class="hud">
+    <p class="title">공룡 알 달리기</p>
+    <p class="score" id="score">알: 0</p>
+    <p class="status" id="status"></p>
+    <div class="jumpGauge" id="jumpGauge">
+      <div class="jumpGaugeFill" id="jumpGaugeFill"></div>
+    </div>
+    <div class="jumpGauge" id="tongueGauge">
+      <div class="tongueGaugeFill" id="tongueGaugeFill"></div>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="cluster">
+      <button class="move" id="left">&lt;</button>
+      <button class="move" id="right">&gt;</button>
+    </div>
+    <div class="rightControls">
+      <button class="reset" id="reset">다시</button>
+      <div class="actions">
+        <button class="transform" id="transform">변신</button>
+        <button class="tongue" id="tongue">먹기</button>
+        <button class="jump" id="jump">점프</button>
+      </div>
+    </div>
+  </div>
+  <div class="warpModal" id="warpModal">
+    <div class="warpPanel">
+      <p class="warpTitle">비밀 워프</p>
+      <p class="warpBody">어느 스테이지로 갈지 골라줘</p>
+      <div class="warpGrid" id="warpGrid"></div>
+      <button class="warpCancel" id="warpCancel">취소</button>
+    </div>
+  </div>
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const statusEl = document.getElementById('status');
+    const transformButtonEl = document.getElementById('transform');
+    const tongueButtonEl = document.getElementById('tongue');
+    const jumpGaugeEl = document.getElementById('jumpGauge');
+    const jumpGaugeFillEl = document.getElementById('jumpGaugeFill');
+    const tongueGaugeEl = document.getElementById('tongueGauge');
+    const tongueGaugeFillEl = document.getElementById('tongueGaugeFill');
+    const warpModalEl = document.getElementById('warpModal');
+    const warpGridEl = document.getElementById('warpGrid');
+    const warpCancelEl = document.getElementById('warpCancel');
+
+    let width = 1;
+    let height = 1;
+    let scale = 1;
+    let worldWidth = 4200;
+    let cameraX = 0;
+    let left = false;
+    let right = false;
+    let jumpPressed = false;
+    let jumpHeld = false;
+    let jumpReleased = false;
+    let jumpCharge = 0;
+    let tongue = false;
+    let tongueHeld = false;
+    let tongueReleased = false;
+    let tongueCharge = 0;
+    let tongueTimer = 0;
+    let tonguePower = 1;
+    let superTongueActive = false;
+    let facing = 1;
+    let score = 0;
+    let eggAmmo = 0;
+    let bossHealth = 0;
+    let bossAttackTimer = 0;
+    let bossHitFlash = 0;
+    let mutationCharge = 0;
+    let transformed = false;
+    let transformTimer = 0;
+    let heatRayTimer = 0;
+    let coreOrbClaimed = false;
+    let transformRequested = false;
+    let shieldHits = 0;
+    let rainbowTimer = 0;
+    let giantBoss = null;
+    let stageEightDragonTimer = 0;
+    let stageEightLaserTimer = 0;
+    let stageEightDragonArmed = false;
+    let stageNineDragonX = 820;
+    let warpMenuVisible = false;
+    let stage = 1;
+
+    const player = { x: 80, y: 0, w: 58, h: 78, vx: 0, vy: 0, grounded: false };
+    let platforms = [];
+    let eggs = [];
+    let enemies = [];
+    let trees = [];
+    let apples = [];
+    let eggShots = [];
+    let bossEggs = [];
+    let bossAttackEggs = [];
+
+    function stageWorldWidthFor(stageNumber) {
+      return stageNumber === 9 ? 39200 : (stageNumber === 8 ? 5200 : (stageNumber === 7 ? 4200 : (stageNumber === 6 ? 5000 : (stageNumber === 5 ? 5200 : (stageNumber === 4 ? 4600 : (stageNumber === 3 ? 5000 : (stageNumber === 2 ? 4700 : 4200)))))));
+    }
+
+    function stageGoalX(stageNumber) {
+      return stageNumber === 8 ? 2520 : worldWidth - 140;
+    }
+
+    function stageGoalBaseY(stageNumber) {
+      return stageNumber === 8 ? 820 : 760;
+    }
+
+    function isStageOneWarpZone() {
+      if (stage !== 1) return false;
+      const playerCenterX = player.x + player.w / 2;
+      return playerCenterX >= 500 && playerCenterX <= 720;
+    }
+
+    function refreshHud() {
+      const transformEnabled = stage < 6;
+      const formText = transformed ? `변신 ${transformTimer.toFixed(1)}s` : (mutationCharge >= .98 ? '변신 READY' : `변신 ${Math.round(mutationCharge * 100)}%`);
+      const defenseText = stage === 9 ? '무지개 INF' : (rainbowTimer > 0 ? `무지개 ${rainbowTimer.toFixed(1)}s` : `방어 ${shieldHits}`);
+      const bossText = stage === 7 && giantBoss ? `  보스 ${Math.max(0, giantBoss.health)}/3  ${giantBoss.timer.toFixed(1)}s` : '';
+      scoreEl.textContent = stage >= 4
+        ? `알: ${score}  탄: ${eggAmmo}${transformEnabled ? `  ${formText}` : ''}  ${defenseText}${bossText}`
+        : `알: ${score}${transformEnabled ? `  ${formText}` : ''}  ${defenseText}${bossText}`;
+      transformButtonEl.style.display = transformEnabled ? '' : 'none';
+      tongueButtonEl.textContent = transformed ? '열선' : '먹기';
+      jumpGaugeEl.style.display = stage >= 4 ? 'block' : 'none';
+      jumpGaugeFillEl.style.width = `${Math.round(jumpCharge * 100)}%`;
+      jumpGaugeFillEl.style.background = jumpCharge >= .98 ? '#ffd166' : '#e85d75';
+      tongueGaugeEl.style.display = 'block';
+      tongueGaugeFillEl.style.width = `${Math.round(tongueCharge * 100)}%`;
+      tongueGaugeFillEl.style.background = tongueCharge >= .98 ? '#39a66b' : '#7fdca1';
+      warpModalEl.style.display = warpMenuVisible ? 'flex' : 'none';
+    }
+
+    function stagePlatforms(stageNumber) {
+      if (stageNumber === 3) {
+        return [
+          { x: 0, y: 760, w: 430, h: 72 },
+          { x: 520, y: 640, w: 170, h: 46 },
+          { x: 800, y: 520, w: 160, h: 46 },
+          { x: 1110, y: 610, w: 180, h: 46 },
+          { x: 1410, y: 460, w: 170, h: 46 },
+          { x: 1720, y: 560, w: 190, h: 46 },
+          { x: 2050, y: 420, w: 170, h: 46 },
+          { x: 2360, y: 520, w: 210, h: 46 },
+          { x: 2720, y: 390, w: 180, h: 46 },
+          { x: 3060, y: 540, w: 190, h: 46 },
+          { x: 3410, y: 450, w: 170, h: 46 },
+          { x: 3740, y: 590, w: 210, h: 46 },
+          { x: 4110, y: 470, w: 180, h: 46 },
+          { x: 4440, y: 620, w: 210, h: 46 },
+          { x: 4780, y: 760, w: 420, h: 72 }
+        ];
+      }
+      if (stageNumber === 4) {
+        return [
+          { x: 0, y: 760, w: 560, h: 72 },
+          { x: 650, y: 700, w: 260, h: 52 },
+          { x: 1040, y: 640, w: 280, h: 52 },
+          { x: 1460, y: 710, w: 340, h: 52 },
+          { x: 1940, y: 610, w: 260, h: 52 },
+          { x: 2320, y: 690, w: 300, h: 52 },
+          { x: 2760, y: 590, w: 300, h: 52 },
+          { x: 3200, y: 700, w: 330, h: 52 },
+          { x: 3660, y: 620, w: 300, h: 52 },
+          { x: 4100, y: 760, w: 560, h: 72 }
+        ];
+      }
+      if (stageNumber === 5) {
+        return [
+          { x: 0, y: 760, w: 520, h: 72 },
+          { x: 620, y: 700, w: 240, h: 48 },
+          { x: 980, y: 620, w: 220, h: 48 },
+          { x: 1320, y: 540, w: 240, h: 48 },
+          { x: 1690, y: 660, w: 280, h: 48 },
+          { x: 2080, y: 580, w: 260, h: 48 },
+          { x: 2460, y: 470, w: 240, h: 48 },
+          { x: 2820, y: 610, w: 320, h: 48 },
+          { x: 3260, y: 520, w: 280, h: 48 },
+          { x: 3640, y: 650, w: 320, h: 48 },
+          { x: 4080, y: 560, w: 300, h: 48 },
+          { x: 4490, y: 470, w: 260, h: 48 },
+          { x: 4850, y: 760, w: 420, h: 72 }
+        ];
+      }
+      if (stageNumber === 6) {
+        return [
+          { x: 0, y: 760, w: 5200, h: 92 }
+        ];
+      }
+      if (stageNumber === 7) {
+        return [
+          { x: 0, y: 760, w: 4200, h: 92 }
+        ];
+      }
+      if (stageNumber === 8) {
+        return [
+          { x: 0, y: 760, w: 620, h: 92 },
+          { x: 740, y: 700, w: 520, h: 56 },
+          { x: 1360, y: 620, w: 920, h: 46 },
+          { x: 2140, y: 820, w: 900, h: 78 },
+          { x: 3040, y: 620, w: 1060, h: 46 },
+          { x: 4320, y: 760, w: 560, h: 92 }
+        ];
+      }
+      if (stageNumber === 9) {
+        return [
+          { x: 0, y: 760, w: 5200, h: 74 },
+          { x: 5480, y: 700, w: 2600, h: 62 },
+          { x: 8400, y: 620, w: 3000, h: 60 },
+          { x: 11780, y: 760, w: 4200, h: 74 },
+          { x: 16320, y: 680, w: 3000, h: 62 },
+          { x: 19840, y: 600, w: 3400, h: 58 },
+          { x: 23680, y: 760, w: 4200, h: 74 },
+          { x: 28240, y: 660, w: 3400, h: 60 },
+          { x: 32120, y: 580, w: 3600, h: 58 },
+          { x: 36080, y: 760, w: 2900, h: 92 }
+        ];
+      }
+      if (stageNumber === 2) {
+        return [
+          { x: 0, y: 760, w: 430, h: 72 },
+          { x: 530, y: 650, w: 180, h: 42 },
+          { x: 820, y: 560, w: 170, h: 42 },
+          { x: 1110, y: 470, w: 190, h: 42 },
+          { x: 1420, y: 590, w: 180, h: 42 },
+          { x: 1740, y: 500, w: 190, h: 42 },
+          { x: 2060, y: 410, w: 180, h: 42 },
+          { x: 2380, y: 530, w: 210, h: 42 },
+          { x: 2730, y: 450, w: 190, h: 42 },
+          { x: 3050, y: 610, w: 220, h: 42 },
+          { x: 3420, y: 520, w: 190, h: 42 },
+          { x: 3750, y: 430, w: 190, h: 42 },
+          { x: 4070, y: 570, w: 210, h: 42 },
+          { x: 4440, y: 760, w: 420, h: 72 }
+        ];
+      }
+      return [
+        { x: 0, y: 760, w: 520, h: 72 },
+        { x: 610, y: 700, w: 270, h: 48 },
+        { x: 960, y: 620, w: 260, h: 48 },
+        { x: 1320, y: 720, w: 340, h: 52 },
+        { x: 1760, y: 650, w: 320, h: 52 },
+        { x: 2140, y: 760, w: 360, h: 72 },
+        { x: 2580, y: 690, w: 300, h: 48 },
+        { x: 3000, y: 610, w: 280, h: 48 },
+        { x: 3400, y: 700, w: 330, h: 52 },
+        { x: 3860, y: 760, w: 430, h: 72 }
+      ];
+    }
+
+    function stageEggs(stageNumber) {
+      if (stageNumber === 3) {
+        return [
+          { x: 580, y: 585, got: false },
+          { x: 865, y: 465, got: false },
+          { x: 1185, y: 555, got: false },
+          { x: 1480, y: 405, got: false },
+          { x: 1810, y: 505, got: false },
+          { x: 2130, y: 365, got: false },
+          { x: 2470, y: 465, got: false },
+          { x: 2810, y: 335, got: false },
+          { x: 3150, y: 485, got: false },
+          { x: 3490, y: 395, got: false },
+          { x: 3840, y: 535, got: false },
+          { x: 4200, y: 415, got: false },
+          { x: 4540, y: 565, got: false }
+        ];
+      }
+      if (stageNumber === 4) {
+        return [
+          { x: 720, y: 650, got: false },
+          { x: 1120, y: 590, got: false },
+          { x: 1240, y: 590, got: false },
+          { x: 1540, y: 660, got: false },
+          { x: 2030, y: 560, got: false },
+          { x: 2430, y: 640, got: false },
+          { x: 2860, y: 540, got: false },
+          { x: 3300, y: 650, got: false },
+          { x: 3760, y: 570, got: false },
+          { x: 4240, y: 710, got: false }
+        ];
+      }
+      if (stageNumber === 5) {
+        return [
+          { x: 690, y: 650, got: false },
+          { x: 1060, y: 570, got: false },
+          { x: 1420, y: 490, got: false },
+          { x: 1770, y: 610, got: false },
+          { x: 2160, y: 530, got: false },
+          { x: 2520, y: 420, got: false },
+          { x: 2920, y: 560, got: false },
+          { x: 3350, y: 470, got: false },
+          { x: 3730, y: 600, got: false },
+          { x: 4170, y: 510, got: false },
+          { x: 4560, y: 420, got: false }
+        ];
+      }
+      if (stageNumber === 6) {
+        return [
+          { x: 720, y: 700, got: false },
+          { x: 1180, y: 700, got: false },
+          { x: 1700, y: 700, got: false },
+          { x: 2240, y: 700, got: false },
+          { x: 2780, y: 700, got: false },
+          { x: 3320, y: 700, got: false },
+          { x: 3880, y: 700, got: false },
+          { x: 4460, y: 700, got: false }
+        ];
+      }
+      if (stageNumber === 7) {
+        return [];
+      }
+      if (stageNumber === 8) {
+        return [
+          { x: 820, y: 650, got: false },
+          { x: 980, y: 650, got: false },
+          { x: 1140, y: 650, got: false },
+          { x: 1420, y: 570, got: false },
+          { x: 1560, y: 570, got: false },
+          { x: 1700, y: 570, got: false },
+          { x: 1840, y: 570, got: false },
+          { x: 1980, y: 570, got: false },
+          { x: 2120, y: 570, got: false },
+          { x: 2260, y: 570, got: false },
+          { x: 2260, y: 760, got: false },
+          { x: 2400, y: 760, got: false },
+          { x: 2540, y: 760, got: false },
+          { x: 2680, y: 760, got: false },
+          { x: 2820, y: 760, got: false },
+          { x: 3160, y: 570, got: false },
+          { x: 3400, y: 570, got: false },
+          { x: 3640, y: 570, got: false },
+          { x: 3880, y: 570, got: false },
+          { x: 4500, y: 700, got: false }
+        ];
+      }
+      if (stageNumber === 9) {
+        return [
+          { x: 760, y: 700, got: false }, { x: 1420, y: 700, got: false }, { x: 2080, y: 700, got: false }, { x: 2740, y: 700, got: false }, { x: 3400, y: 700, got: false },
+          { x: 4060, y: 700, got: false }, { x: 4720, y: 700, got: false }, { x: 5840, y: 640, got: false }, { x: 6480, y: 640, got: false }, { x: 7120, y: 640, got: false },
+          { x: 7760, y: 640, got: false }, { x: 8680, y: 560, got: false }, { x: 9400, y: 560, got: false }, { x: 10120, y: 560, got: false }, { x: 10840, y: 560, got: false },
+          { x: 12040, y: 700, got: false }, { x: 12880, y: 700, got: false }, { x: 13720, y: 700, got: false }, { x: 14560, y: 700, got: false }, { x: 15400, y: 700, got: false },
+          { x: 16640, y: 620, got: false }, { x: 17520, y: 620, got: false }, { x: 18400, y: 620, got: false }, { x: 20120, y: 540, got: false }, { x: 21080, y: 540, got: false },
+          { x: 22040, y: 540, got: false }, { x: 23000, y: 540, got: false }, { x: 24020, y: 700, got: false }, { x: 24920, y: 700, got: false }, { x: 25820, y: 700, got: false },
+          { x: 26720, y: 700, got: false }, { x: 28620, y: 600, got: false }, { x: 29560, y: 600, got: false }, { x: 30500, y: 600, got: false }, { x: 31440, y: 600, got: false },
+          { x: 32440, y: 520, got: false }, { x: 33420, y: 520, got: false }, { x: 34400, y: 520, got: false }, { x: 35380, y: 520, got: false }, { x: 36680, y: 700, got: false },
+          { x: 37480, y: 700, got: false }, { x: 38280, y: 700, got: false }
+        ];
+      }
+      if (stageNumber === 2) {
+        return [
+          { x: 595, y: 600, got: false },
+          { x: 875, y: 510, got: false },
+          { x: 1180, y: 420, got: false },
+          { x: 1490, y: 540, got: false },
+          { x: 1810, y: 450, got: false },
+          { x: 2130, y: 360, got: false },
+          { x: 2480, y: 480, got: false },
+          { x: 2820, y: 400, got: false },
+          { x: 3150, y: 560, got: false },
+          { x: 3510, y: 470, got: false },
+          { x: 3840, y: 380, got: false },
+          { x: 4160, y: 520, got: false }
+        ];
+      }
+      return [
+        { x: 690, y: 650, got: false },
+        { x: 1040, y: 570, got: false },
+        { x: 1140, y: 570, got: false },
+        { x: 1430, y: 670, got: false },
+        { x: 1860, y: 600, got: false },
+        { x: 1980, y: 600, got: false },
+        { x: 2280, y: 710, got: false },
+        { x: 2670, y: 640, got: false },
+        { x: 3090, y: 560, got: false },
+        { x: 3190, y: 560, got: false },
+        { x: 3520, y: 650, got: false },
+        { x: 4000, y: 710, got: false }
+      ];
+    }
+
+    function stageEnemies(stageNumber) {
+      const make = (start, end, y) => ({
+        start, end, y, x: start, dir: 1, alive: true, eaten: 0, fromX: start, fromY: y,
+        grabbed: false, spinTaps: 0, spinAngle: 0, thrown: false, throwVx: 0, throwVy: 0, respawnDelay: 0
+      });
+      if (stageNumber === 3) {
+        return [make(1135, 1270, 562), make(2390, 2550, 472), make(3440, 3570, 402), make(4455, 4620, 572)];
+      }
+      if (stageNumber === 4) {
+        return [];
+      }
+      if (stageNumber === 5) {
+        return [make(1010, 1170, 562), make(2100, 2310, 522), make(3270, 3490, 462), make(4100, 4330, 502)];
+      }
+      if (stageNumber === 6) {
+        return [make(930, 1150, 706), make(1930, 2140, 706), make(2860, 3080, 706), make(3810, 4040, 706)];
+      }
+      if (stageNumber === 7) {
+        return [];
+      }
+      if (stageNumber === 8) {
+        return [make(870, 1160, 642), make(1510, 2060, 562), make(2220, 2920, 762), make(3180, 3960, 562)];
+      }
+      if (stageNumber === 9) {
+        return [make(920, 1480, 706), make(6120, 7720, 646), make(9020, 10720, 566), make(12460, 15060, 706), make(17020, 18720, 626), make(20480, 22780, 546), make(24260, 26960, 706), make(28840, 31140, 606), make(32740, 35140, 526), make(36760, 38660, 706)];
+      }
+      return stageNumber === 2
+        ? [make(1445, 1580, 542), make(2405, 2570, 482), make(3445, 3590, 472), make(4085, 4250, 522)]
+        : [make(1380, 1600, 672), make(1810, 2020, 602), make(2640, 2830, 642), make(3440, 3670, 652)];
+    }
+
+    function stageTrees(stageNumber) {
+      if (stageNumber === 6) {
+        return [
+          { x: 840, y: 760, appleSpawned: false },
+          { x: 1560, y: 760, appleSpawned: false },
+          { x: 2450, y: 760, appleSpawned: false },
+          { x: 3360, y: 760, appleSpawned: false },
+          { x: 4260, y: 760, appleSpawned: false }
+        ];
+      }
+      return [];
+    }
+
+    function resize() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(width * ratio);
+      canvas.height = Math.floor(height * ratio);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      scale = height / 900;
+      worldWidth = stageWorldWidthFor(stage);
+    }
+
+    function loadStage(stageNumber) {
+      stage = stageNumber;
+      player.x = 80;
+      player.y = 0;
+      player.vx = 0;
+      player.vy = 0;
+      player.grounded = false;
+      cameraX = 0;
+      score = stage === 4 ? 20 : 0;
+      eggAmmo = 0;
+      bossHealth = stage === 4 ? 10 : 0;
+      bossAttackTimer = 1.4;
+      bossHitFlash = 0;
+      mutationCharge = 0;
+      transformed = false;
+      transformTimer = 0;
+      heatRayTimer = 0;
+      coreOrbClaimed = false;
+      transformRequested = false;
+      shieldHits = 0;
+      rainbowTimer = stage === 9 ? 9999 : 0;
+      giantBoss = null;
+      stageEightDragonTimer = 0;
+      stageEightLaserTimer = 0;
+      stageEightDragonArmed = stage === 8;
+      stageNineDragonX = stage === 9 ? 820 : stageNineDragonX;
+      warpMenuVisible = false;
+      tongueTimer = 0;
+      jumpPressed = false;
+      jumpHeld = false;
+      jumpReleased = false;
+      jumpCharge = 0;
+      tongue = false;
+      tongueHeld = false;
+      tongueReleased = false;
+      tongueCharge = 0;
+      tonguePower = 1;
+      superTongueActive = false;
+      statusEl.textContent = '';
+      worldWidth = stageWorldWidthFor(stage);
+      platforms = stagePlatforms(stage);
+      eggs = stageEggs(stage);
+      enemies = stageEnemies(stage);
+      trees = stageTrees(stage);
+      apples = [];
+      if (stage === 7) {
+        apples.push({ treeX: 420, x: 420, y: 700, age: 6, got: false });
+        giantBoss = { x: worldWidth - 520, dir: -1, health: 3, timer: 14, hitCooldown: 0, pushTimer: 0, pushCooldown: 1.8, shoveCooldown: 0, deathTimer: 0, deathFall: 0 };
+      }
+      eggShots = [];
+      bossEggs = [];
+      bossAttackEggs = [];
+      refreshHud();
+    }
+
+    function reset() { loadStage(stage); }
+
+    for (let i = 1; i <= 9; i += 1) {
+      const button = document.createElement('button');
+      button.className = 'warpStage';
+      button.textContent = `Stage ${i}`;
+      button.addEventListener('click', () => {
+        loadStage(i);
+        statusEl.textContent = `비밀 워프! Stage ${i}`;
+      });
+      warpGridEl.appendChild(button);
+    }
+    warpCancelEl.addEventListener('click', () => {
+      warpMenuVisible = false;
+      reset();
+    });
+
+    function setHold(button, setter) {
+      const on = event => {
+        event.preventDefault();
+        setter(true);
+      };
+      const off = event => {
+        event.preventDefault();
+        setter(false);
+      };
+      button.addEventListener('pointerdown', on);
+      button.addEventListener('pointerup', off);
+      button.addEventListener('pointercancel', off);
+      button.addEventListener('pointerleave', off);
+    }
+
+    setHold(document.getElementById('left'), value => left = value);
+    setHold(document.getElementById('right'), value => right = value);
+    document.getElementById('jump').addEventListener('pointerdown', event => {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      if (!jumpHeld) jumpPressed = true;
+      jumpHeld = true;
+    });
+    document.getElementById('jump').addEventListener('pointerup', event => {
+      event.preventDefault();
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+      jumpHeld = false;
+      jumpReleased = true;
+    });
+    document.getElementById('jump').addEventListener('pointercancel', event => {
+      event.preventDefault();
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+      jumpHeld = false;
+      jumpReleased = true;
+    });
+    document.getElementById('transform').addEventListener('pointerdown', event => {
+      event.preventDefault();
+      transformRequested = true;
+    });
+    document.getElementById('tongue').addEventListener('pointerdown', event => {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      if (transformed) {
+        tongue = true;
+      } else {
+        tongueHeld = true;
+      }
+    });
+    document.getElementById('tongue').addEventListener('pointerup', event => {
+      event.preventDefault();
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+      tongueHeld = false;
+      tongueReleased = true;
+    });
+    document.getElementById('tongue').addEventListener('pointercancel', event => {
+      event.preventDefault();
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+      tongueHeld = false;
+      tongueReleased = true;
+    });
+    document.getElementById('reset').addEventListener('click', reset);
+    window.addEventListener('touchmove', event => {
+      event.preventDefault();
+    }, { passive: false });
+    window.addEventListener('keydown', event => {
+      if (event.key === 'ArrowLeft' || event.key === 'a') left = true;
+      if (event.key === 'ArrowRight' || event.key === 'd') right = true;
+      if (event.key === ' ' || event.key === 'ArrowUp' || event.key === 'w') {
+        event.preventDefault();
+        if (!jumpHeld && !event.repeat) jumpPressed = true;
+        jumpHeld = true;
+      }
+      if (event.key === 'x' || event.key === 'Enter') {
+        event.preventDefault();
+        if (transformed) {
+          tongue = true;
+        } else {
+          if (!tongueHeld) tongueHeld = true;
+        }
+      }
+      if (event.key === 'c') {
+        event.preventDefault();
+        transformRequested = true;
+      }
+    });
+    window.addEventListener('keyup', event => {
+      if (event.key === 'ArrowLeft' || event.key === 'a') left = false;
+      if (event.key === 'ArrowRight' || event.key === 'd') right = false;
+      if (event.key === ' ' || event.key === 'ArrowUp' || event.key === 'w') {
+        event.preventDefault();
+        jumpHeld = false;
+        jumpReleased = true;
+      }
+      if (event.key === 'x' || event.key === 'Enter') {
+        event.preventDefault();
+        tongueHeld = false;
+        tongueReleased = true;
+      }
+    });
+    window.addEventListener('resize', resize);
+
+    function overlaps(a, b) {
+      return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    }
+
+    function update(dt) {
+      if (warpMenuVisible) {
+        player.vx = 0;
+        player.vy = 0;
+        refreshHud();
+        return;
+      }
+      let resetAfterEnemyCollision = false;
+      const coreOrbX = worldWidth - 240;
+      const coreOrbY = 560;
+      const rainbowInvincible = rainbowTimer > 0;
+      const transformEnabled = stage < 6;
+      const incomingBossEgg = stage === 4 && bossAttackEggs.some(egg =>
+        !egg.got &&
+        !egg.landed &&
+        egg.warning <= 0 &&
+        Math.abs(bossAttackEggX(egg) - (player.x + player.w / 2)) < 240 &&
+        Math.abs(bossAttackEggY(egg) - (player.y + player.h / 2)) < 190
+      );
+      if (incomingBossEgg) {
+        dt *= .32;
+        statusEl.textContent = '먹기!';
+      }
+      if (left) player.vx -= 2200 * dt;
+      if (right) player.vx += 2200 * dt;
+      if (!left && !right) player.vx *= player.grounded ? .78 : .94;
+      player.vx = Math.max(-(rainbowInvincible ? 620 : 430), Math.min((rainbowInvincible ? 620 : 430), player.vx));
+      if (player.vx < -24) facing = -1;
+      if (player.vx > 24) facing = 1;
+
+      if (!transformEnabled) {
+        mutationCharge = 0;
+        transformed = false;
+        transformTimer = 0;
+        heatRayTimer = 0;
+      } else if (!transformed) {
+        mutationCharge = Math.min(1, mutationCharge + dt / 22);
+        if (mutationCharge >= .98 && !statusEl.textContent) statusEl.textContent = '변신 가능!';
+        if (transformRequested && mutationCharge >= .98) {
+          transformed = true;
+          transformTimer = 12;
+          mutationCharge = 0;
+          tongueCharge = 0;
+          statusEl.textContent = '고질라 변신!';
+        }
+      } else {
+        transformTimer = Math.max(0, transformTimer - dt);
+        if (transformTimer <= 0) {
+          transformed = false;
+          mutationCharge = 0;
+          heatRayTimer = 0;
+          statusEl.textContent = '변신 해제';
+        }
+      }
+      rainbowTimer = stage === 9 ? 9999 : Math.max(0, rainbowTimer - dt);
+      if (stage === 8) {
+        const dragonWorldX = 2520;
+        const viewportWorldWidth = width / scale;
+        if (stageEightDragonArmed && dragonWorldX - cameraX <= viewportWorldWidth + 120) {
+          stageEightDragonArmed = false;
+          stageEightDragonTimer = 2.8;
+          stageEightLaserTimer = .9;
+          statusEl.textContent = '드래곤 레이저!';
+        }
+        stageEightDragonTimer = Math.max(0, stageEightDragonTimer - dt);
+        stageEightLaserTimer = Math.max(0, stageEightLaserTimer - dt);
+      } else if (stage === 9) {
+        const chaseTargetX = Math.min(worldWidth - 840, player.x + 760);
+        stageNineDragonX += (chaseTargetX - stageNineDragonX) * Math.min(1, dt * 2.4);
+        if (!statusEl.textContent) statusEl.textContent = '무지개 각성! 드래곤을 추격해!';
+      }
+      transformRequested = false;
+
+      if (stage === 7 && giantBoss) {
+        giantBoss.hitCooldown = Math.max(0, giantBoss.hitCooldown - dt);
+        giantBoss.shoveCooldown = Math.max(0, giantBoss.shoveCooldown - dt);
+        if (giantBoss.health > 0) {
+          giantBoss.timer = Math.max(0, giantBoss.timer - dt);
+          giantBoss.pushCooldown = Math.max(0, giantBoss.pushCooldown - dt);
+          if (giantBoss.pushTimer > 0) {
+            giantBoss.pushTimer = Math.max(0, giantBoss.pushTimer - dt);
+            giantBoss.dir = player.x + player.w / 2 >= giantBoss.x ? 1 : -1;
+            giantBoss.x += giantBoss.dir * 280 * dt;
+            if (giantBoss.pushTimer <= 0) giantBoss.pushCooldown = 2.15;
+          } else {
+            giantBoss.x += giantBoss.dir * 110 * dt;
+            if (giantBoss.pushCooldown <= 0) {
+              giantBoss.pushTimer = .78;
+              giantBoss.pushCooldown = 99;
+              statusEl.textContent = '밀어낸다!';
+            }
+          }
+          if (giantBoss.x < 2480 || giantBoss.x > worldWidth - 360) {
+            giantBoss.dir *= -1;
+            giantBoss.x = Math.max(2480, Math.min(worldWidth - 360, giantBoss.x));
+          }
+          if (giantBoss.timer <= 0) {
+            reset();
+            statusEl.textContent = '다시 도전';
+            return;
+          }
+        } else if (giantBoss.deathTimer > 0) {
+          giantBoss.deathTimer = Math.max(0, giantBoss.deathTimer - dt);
+          giantBoss.deathFall += 240 * dt;
+          giantBoss.x += giantBoss.dir * 44 * dt;
+          if (giantBoss.deathTimer <= 0) statusEl.textContent = '스테이지 클리어';
+        }
+      }
+
+      if (stage >= 4 && jumpHeld && player.grounded) {
+        jumpCharge = Math.min(1, jumpCharge + dt / .7);
+        if (jumpCharge >= .98) statusEl.textContent = '슈퍼 점프 준비!';
+      } else if (stage >= 4 && jumpReleased && jumpCharge > 0) {
+        const jumpPower = 860 + 520 * jumpCharge;
+        player.vy = -jumpPower;
+        player.grounded = false;
+        statusEl.textContent = jumpCharge >= .98 ? '슈퍼 점프!' : '';
+        jumpCharge = 0;
+      } else if (stage < 4 || (!jumpHeld && !jumpReleased)) {
+        jumpCharge = 0;
+      }
+
+      if (jumpPressed) {
+        if (stage >= 4 && player.grounded) {
+          // Late-game stages charge jump on hold and jump on release.
+        } else if (player.grounded) {
+          player.vy = -860;
+          player.grounded = false;
+        } else if (stage >= 4 && eggAmmo > 0) {
+          eggAmmo -= 1;
+          eggShots.push({
+            x: player.x + (facing > 0 ? player.w + 8 : -8),
+            y: player.y + 28,
+            vx: facing * 760,
+            vy: -160,
+            homesToBoss: false
+          });
+          statusEl.textContent = 'Egg throw';
+          refreshHud();
+        }
+      }
+      jumpPressed = false;
+      jumpReleased = false;
+      if (!transformed && mutationCharge < .98 && tongueHeld) {
+        tongueCharge = Math.min(1, tongueCharge + dt / .45);
+        if (tongueCharge >= .98) statusEl.textContent = '슈퍼 먹기 준비!';
+      } else if (tongueReleased) {
+        tongue = true;
+      } else if (!tongueHeld && !tongueReleased) {
+        tongueCharge = 0;
+      }
+      const eatPressedThisFrame = tongue;
+      if (tongue) {
+        if (transformed) {
+          heatRayTimer = .24;
+          statusEl.textContent = '방사열선!';
+        } else {
+          superTongueActive = tongueCharge >= .98;
+          tonguePower = superTongueActive ? 1.9 : 1;
+          tongueTimer = superTongueActive ? .28 : .18;
+          if (superTongueActive) statusEl.textContent = '슈퍼 먹기!';
+          tongueCharge = 0;
+        }
+      }
+      tongue = false;
+      tongueReleased = false;
+      tongueTimer = Math.max(0, tongueTimer - dt);
+      heatRayTimer = Math.max(0, heatRayTimer - dt);
+      if (tongueTimer <= 0) {
+        superTongueActive = false;
+        tonguePower = 1;
+      }
+
+      const prevBottom = player.y + player.h;
+      player.x = Math.max(12, Math.min(worldWidth - player.w - 12, player.x + player.vx * dt));
+      player.y += player.vy * dt;
+      player.vy += 2350 * dt;
+      player.grounded = false;
+
+      for (const platform of platforms) {
+        const overlapsX = player.x + player.w > platform.x && player.x < platform.x + platform.w;
+        const crossedTop = prevBottom <= platform.y && player.y + player.h >= platform.y;
+        if (overlapsX && crossedTop && player.vy >= 0) {
+          player.y = platform.y - player.h;
+          player.vy = 0;
+          player.grounded = true;
+        }
+      }
+
+      if (player.y > 940) {
+        if (isStageOneWarpZone()) {
+          warpMenuVisible = true;
+          statusEl.textContent = '워프할 스테이지를 골라라!';
+          player.vx = 0;
+          player.vy = 0;
+        } else {
+          reset();
+          statusEl.textContent = '다시 도전';
+        }
+      }
+
+      if (stage === 5 && !coreOrbClaimed) {
+        if (Math.abs(player.x + player.w / 2 - coreOrbX) < 60 && Math.abs(player.y + player.h / 2 - coreOrbY) < 92) {
+          coreOrbClaimed = true;
+          mutationCharge = 1;
+          statusEl.textContent = '코어 확보!';
+        }
+      }
+
+      for (const egg of eggs) {
+        if (!egg.got && Math.abs(player.x + player.w / 2 - egg.x) < 52 && Math.abs(player.y + player.h / 2 - egg.y) < 62) {
+          egg.got = true;
+          score += 1;
+          if (stage >= 4) eggAmmo += 1;
+          refreshHud();
+        }
+      }
+      for (const apple of apples) {
+        if (!apple.got) {
+          apple.age += dt;
+          if (Math.abs(player.x + player.w / 2 - apple.x) < 52 && Math.abs(player.y + player.h / 2 - apple.y) < 62) {
+            apple.got = true;
+            if (apple.age >= 5) {
+              rainbowTimer = 11;
+              shieldHits = 0;
+              statusEl.textContent = '무지개 황금사과!';
+            } else {
+              shieldHits = Math.max(shieldHits, 1);
+              statusEl.textContent = '사과 방어막!';
+            }
+            refreshHud();
+          }
+        }
+      }
+      for (const egg of bossEggs) {
+        if (!egg.got && Math.abs(player.x + player.w / 2 - egg.x) < 52 && Math.abs(player.y + player.h / 2 - egg.y) < 62) {
+          egg.got = true;
+          eggAmmo += 1;
+          refreshHud();
+        }
+      }
+      for (const egg of bossAttackEggs) {
+        const currentX = bossAttackEggX(egg);
+        const currentY = bossAttackEggY(egg);
+        if (egg.warning > 0) {
+          egg.warning -= dt;
+        } else if (!egg.landed) {
+          egg.progress = Math.min(1, egg.progress + dt / 1.55);
+          const catchable = (eatPressedThisFrame || superTongueActive) &&
+            !egg.got &&
+            Math.abs(currentX - (player.x + player.w / 2)) < (superTongueActive ? 340 : 220) &&
+            Math.abs(currentY - (player.y + player.h / 2)) < (superTongueActive ? 220 : 170);
+          const rayCatchable = transformed &&
+            heatRayTimer > 0 &&
+            Math.abs(currentX - (player.x + player.w / 2)) < 420 &&
+            Math.abs(currentY - (player.y + player.h / 2)) < 220;
+          if (catchable || rayCatchable) {
+            egg.got = true;
+            eggShots.push({
+              x: player.x + player.w + 10,
+              y: player.y + 26,
+              vx: 860,
+              vy: -210,
+              homesToBoss: true
+            });
+            statusEl.textContent = '반격!';
+            refreshHud();
+            continue;
+          }
+          if (overlaps({ x: currentX - 18, y: currentY - 20, w: 36, h: 40 }, player) && !transformed && !rainbowInvincible) {
+            if (shieldHits > 0) {
+              shieldHits -= 1;
+              egg.got = true;
+              statusEl.textContent = '방어막!';
+              refreshHud();
+            } else {
+              resetAfterEnemyCollision = true;
+            }
+          }
+          if (egg.progress >= 1) egg.landed = true;
+        } else if (!egg.got) {
+          if (((eatPressedThisFrame || superTongueActive) && Math.abs(player.x + player.w / 2 - currentX) < (superTongueActive ? 340 : 220) && Math.abs(player.y + player.h / 2 - currentY) < (superTongueActive ? 220 : 170)) || (transformed && heatRayTimer > 0 && Math.abs(player.x + player.w / 2 - currentX) < 420 && Math.abs(player.y + player.h / 2 - currentY) < 220)) {
+            egg.got = true;
+            eggShots.push({
+              x: player.x + player.w + 10,
+              y: player.y + 26,
+              vx: 860,
+              vy: -210,
+              homesToBoss: true
+            });
+            statusEl.textContent = '반격!';
+            refreshHud();
+            continue;
+          }
+          if (Math.abs(player.x + player.w / 2 - currentX) < 52 && Math.abs(player.y + player.h / 2 - currentY) < 62) {
+            egg.got = true;
+            eggAmmo += 1;
+            refreshHud();
+          }
+        }
+      }
+      if (stage === 4 && bossHealth > 0) {
+        bossAttackTimer -= dt;
+        bossHitFlash = Math.max(0, bossHitFlash - dt);
+        if (bossAttackTimer <= 0) {
+          const bossX = worldWidth - 360;
+          bossAttackEggs.push({
+            startX: bossX - 40,
+            startY: 520,
+            targetX: Math.max(cameraX + 120, Math.min(cameraX + width / scale - 120, player.x + (bossAttackEggs.length % 2 === 0 ? 40 : -30))),
+            targetY: 735,
+            progress: 0,
+            warning: 1.25,
+            landed: false,
+            got: false
+          });
+          bossAttackEggs = bossAttackEggs.filter(egg => !egg.got && egg.targetX >= cameraX - 160);
+          bossAttackTimer = 2.35;
+          statusEl.textContent = '궤적을 피해!';
+        }
+      }
+      if (resetAfterEnemyCollision) {
+        reset();
+        statusEl.textContent = '아야';
+        return;
+      }
+
+      for (const shot of eggShots) {
+        if (stage === 4 && bossHealth > 0 && shot.homesToBoss) {
+          const bossX = worldWidth - 360;
+          const dx = bossX - shot.x;
+          const dy = 560 - shot.y;
+          const distance = Math.max(1, Math.hypot(dx, dy));
+          shot.vx = dx / distance * 920;
+          shot.vy = dy / distance * 920;
+        }
+        shot.x += shot.vx * dt;
+        shot.y += shot.vy * dt;
+        if (!shot.homesToBoss) shot.vy += 820 * dt;
+      }
+      const spentShots = new Set();
+      if (stage === 4 && bossHealth > 0) {
+        const bossX = worldWidth - 360;
+        for (const shot of eggShots) {
+          if (overlaps({ x: shot.x - 16, y: shot.y - 18, w: 32, h: 36 }, { x: bossX - 78, y: 500, w: 156, h: 190 })) {
+            spentShots.add(shot);
+            bossHealth = Math.max(0, bossHealth - 1);
+            bossHitFlash = .18;
+            statusEl.textContent = bossHealth > 0 ? `Boss HP: ${bossHealth}` : '스테이지 클리어';
+          }
+        }
+      }
+
+      for (const enemy of enemies) {
+        if (!enemy.alive) {
+          if (enemy.respawnDelay > 0) {
+            enemy.respawnDelay -= dt;
+            continue;
+          }
+          const enemyScreenX = (enemy.x - cameraX) * scale;
+          if (enemyScreenX < -90 || enemyScreenX > width + 90) {
+            enemy.alive = true;
+            enemy.eaten = 0;
+            enemy.grabbed = false;
+            enemy.thrown = false;
+            enemy.spinTaps = 0;
+            enemy.respawnDelay = 0;
+            enemy.x = enemy.x < cameraX ? enemy.start : enemy.end;
+            enemy.dir = enemy.x < cameraX ? 1 : -1;
+          }
+          continue;
+        }
+        if (enemy.thrown) {
+          enemy.x += enemy.throwVx * dt;
+          enemy.y += enemy.throwVy * dt;
+          enemy.throwVy += 520 * dt;
+          const enemyScreenX = (enemy.x - cameraX) * scale;
+          if (enemyScreenX < -120 || enemyScreenX > width + 120 || enemy.y > 960) {
+            enemy.alive = false;
+            enemy.thrown = false;
+            enemy.respawnDelay = 1.6;
+          }
+          continue;
+        }
+        if (enemy.grabbed) {
+          if (eatPressedThisFrame) enemy.spinTaps += 1;
+          if (enemy.spinTaps === 0) {
+            enemy.x = player.x + (facing > 0 ? 82 : -28);
+            enemy.y = player.y + 24;
+          } else {
+            enemy.spinAngle += (8.5 + enemy.spinTaps * 2.6) * dt;
+            const orbitRadius = 48 + Math.min(enemy.spinTaps, 3) * 10;
+            enemy.x = player.x + 28 + Math.cos(enemy.spinAngle) * orbitRadius;
+            enemy.y = player.y + 28 + Math.sin(enemy.spinAngle) * orbitRadius;
+          }
+          if (enemy.spinTaps >= 3) {
+            enemy.grabbed = false;
+            enemy.thrown = true;
+            enemy.throwVx = facing * 900;
+            enemy.throwVy = -260;
+          }
+          continue;
+        }
+        if (enemy.eaten > 0) {
+          if (stage >= 3 && eatPressedThisFrame) {
+            enemy.eaten = 0;
+            enemy.grabbed = true;
+            enemy.spinTaps = 1;
+            enemy.spinAngle = 0;
+            enemy.thrown = false;
+            statusEl.textContent = '연타!';
+            continue;
+          }
+          enemy.eaten += dt / .24;
+          if (enemy.eaten >= 1) {
+            enemy.alive = false;
+            enemy.eaten = 0;
+          }
+          continue;
+        }
+        for (const shot of eggShots) {
+          if (overlaps({ x: shot.x - 16, y: shot.y - 18, w: 32, h: 36 }, { x: enemy.x, y: enemy.y, w: 54, h: 54 })) {
+            enemy.alive = false;
+            enemy.respawnDelay = 1;
+            spentShots.add(shot);
+            score += 2;
+            refreshHud();
+          }
+        }
+        enemy.x += enemy.dir * 130 * dt;
+        if (enemy.x < enemy.start || enemy.x > enemy.end) {
+          enemy.dir *= -1;
+          enemy.x = Math.max(enemy.start, Math.min(enemy.end, enemy.x));
+        }
+
+        if (tongueTimer > 0) {
+          const mouthX = player.x + (facing > 0 ? player.w - 8 : 8);
+          const tongueReach = 120 * tonguePower;
+          const tongueRect = {
+            x: facing > 0 ? mouthX : mouthX - tongueReach,
+            y: player.y + 18,
+            w: tongueReach,
+            h: 24
+          };
+          if (overlaps(tongueRect, { x: enemy.x, y: enemy.y, w: 54, h: 54 })) {
+            enemy.eaten = .01;
+            enemy.fromX = enemy.x;
+            enemy.fromY = enemy.y;
+            score += 2;
+            player.vy = Math.min(player.vy, -180);
+            refreshHud();
+            continue;
+          }
+        }
+        if (transformed && heatRayTimer > 0) {
+          const mouthX = player.x + (facing > 0 ? player.w - 4 : 4);
+          const beamRect = { x: facing > 0 ? mouthX : mouthX - 360, y: player.y + 6, w: 360, h: 44 };
+          if (overlaps(beamRect, { x: enemy.x, y: enemy.y, w: 54, h: 54 })) {
+            enemy.alive = false;
+            enemy.respawnDelay = 1.2;
+            score += 2;
+            refreshHud();
+            continue;
+          }
+        }
+        if (trees.length > 0 && tongueTimer > 0) {
+          const mouthX = player.x + (facing > 0 ? player.w - 8 : 8);
+          const tongueReach = 120 * tonguePower;
+          const tongueRect = { x: facing > 0 ? mouthX : mouthX - tongueReach, y: player.y + 18, w: tongueReach, h: 34 };
+          for (const tree of trees) {
+            if (!tree.appleSpawned && overlaps(tongueRect, { x: tree.x - 34, y: tree.y - 160, w: 68, h: 160 })) {
+              tree.appleSpawned = true;
+              apples.push({ treeX: tree.x, x: tree.x, y: tree.y - 30, age: 0, got: false });
+              statusEl.textContent = '사과!';
+              break;
+            }
+          }
+        }
+
+        const hit = overlaps(player, { x: enemy.x, y: enemy.y, w: 54, h: 54 });
+        if (hit) {
+          if (rainbowInvincible) {
+            enemy.alive = false;
+            enemy.respawnDelay = 1.2;
+            score += 2;
+            refreshHud();
+            continue;
+          }
+          if (player.vy > 120 && player.y + player.h - enemy.y < 36) {
+            enemy.alive = false;
+            if (stage < 3) player.vy = -520;
+            score += 2;
+            refreshHud();
+          } else if (!transformed) {
+            if (shieldHits > 0) {
+              shieldHits -= 1;
+              enemy.alive = false;
+              enemy.respawnDelay = 1.2;
+              statusEl.textContent = '방어막!';
+              refreshHud();
+              continue;
+            }
+            resetAfterEnemyCollision = true;
+            break;
+          }
+        }
+      }
+
+      if (stage === 7 && giantBoss && giantBoss.health > 0) {
+        if (overlaps(player, { x: giantBoss.x - 120, y: 520, w: 240, h: 240 })) {
+          if (rainbowInvincible && giantBoss.hitCooldown <= 0) {
+            giantBoss.health = Math.max(0, giantBoss.health - 1);
+            giantBoss.hitCooldown = .7;
+            player.vx = -giantBoss.dir * 320;
+            player.vy = Math.min(player.vy, -180);
+            if (giantBoss.health > 0) {
+              statusEl.textContent = `Boss HP: ${giantBoss.health}/3`;
+            } else {
+              giantBoss.deathTimer = 1.6;
+              giantBoss.deathFall = 0;
+              statusEl.textContent = '거대 공룡 다운!';
+            }
+          } else if (giantBoss.shoveCooldown <= 0) {
+            const awayDir = player.x + player.w / 2 >= giantBoss.x ? 1 : -1;
+            player.vx = awayDir * 540;
+            player.vy = Math.min(player.vy, -120);
+            giantBoss.shoveCooldown = .6;
+            statusEl.textContent = '밀려났다!';
+          }
+        }
+      }
+
+      apples = apples.filter(apple => !apple.got);
+      eggShots = eggShots.filter(shot =>
+        !spentShots.has(shot) &&
+        shot.x >= cameraX - 80 &&
+        shot.x <= cameraX + width / scale + 120 &&
+        shot.y <= 940
+      );
+
+      if (resetAfterEnemyCollision) {
+        reset();
+        statusEl.textContent = '아야';
+        return;
+      }
+
+      const bossDefeated = stage === 7 && giantBoss && giantBoss.health <= 0 && giantBoss.deathTimer <= 0;
+      const goalX = stageGoalX(stage);
+      const isNearGoal = player.x > goalX - 200;
+      const hasEnoughScoreToAdvance = score >= 20;
+      const stageObjectiveCleared = eggs.every(egg => egg.got) || (stage === 4 && bossHealth <= 0) || (stage >= 5 && stage <= 6) || stage === 8 || bossDefeated;
+      if (stage >= 1 && stage <= 6 && isNearGoal && !hasEnoughScoreToAdvance) {
+        statusEl.textContent = '20점수를 모으지못했군! 20점수되어야 스테이지를넘길수있다! 크하하! 다시버튼을 누르고다시해라!';
+      } else if (bossDefeated && !isNearGoal) {
+        statusEl.textContent = '스테이지 클리어';
+      } else if (player.x > goalX - 70 && stageObjectiveCleared && (stage === 7 || hasEnoughScoreToAdvance)) {
+        if (stage === 1) {
+          loadStage(2);
+          statusEl.textContent = 'Stage 2';
+        } else if (stage === 2) {
+          loadStage(3);
+          statusEl.textContent = 'Stage 3';
+        } else if (stage === 3) {
+          loadStage(4);
+          statusEl.textContent = 'Stage 4';
+        } else if (stage === 4) {
+          loadStage(5);
+          statusEl.textContent = 'Stage 5';
+        } else if (stage === 5) {
+          loadStage(6);
+          statusEl.textContent = 'Stage 6';
+        } else if (stage === 6) {
+          loadStage(7);
+          statusEl.textContent = 'Stage 7';
+        } else if (stage === 7) {
+          loadStage(8);
+          statusEl.textContent = 'Stage 8';
+        } else if (stage === 8) {
+          loadStage(9);
+          statusEl.textContent = 'Stage 9';
+        } else {
+          statusEl.textContent = '스테이지 클리어';
+        }
+      }
+
+      cameraX = Math.max(0, Math.min(worldWidth - width / scale, player.x - 80));
+      refreshHud();
+    }
+
+    function roundedRect(x, y, w, h, r, color) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, r);
+      ctx.fill();
+    }
+
+    function oval(x, y, w, h, color) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function circle(x, y, r, color) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function line(x1, y1, x2, y2, color, size) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = size;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+
+    function drawSky() {
+      if (stage === 3) {
+        const space = ctx.createLinearGradient(0, 0, 0, height);
+        space.addColorStop(0, '#070817');
+        space.addColorStop(.55, '#171039');
+        space.addColorStop(1, '#2a1457');
+        ctx.fillStyle = space;
+        ctx.fillRect(0, 0, width, height);
+        for (let i = 0; i < 38; i += 1) {
+          const x = ((i * 137 - cameraX * .18 * scale) % (width + 80)) - 40;
+          const y = 36 + ((i * 83) % (height * .74));
+          circle(x, y, (1.4 + (i % 4) * .75) * scale, 'rgba(255,255,255,.62)');
+        }
+        circle(width * .78, height * .18, 92 * scale, 'rgba(141,219,255,.28)');
+        circle(width * .78, height * .18, 62 * scale, 'rgba(182,149,255,.52)');
+        ctx.strokeStyle = 'rgba(246,211,101,.55)';
+        ctx.lineWidth = 5 * scale;
+        ctx.beginPath();
+        ctx.ellipse(width * .78, height * .18, 92 * scale, 18 * scale, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        return;
+      }
+      if (stage === 4) {
+        const sky = ctx.createLinearGradient(0, 0, 0, height);
+        sky.addColorStop(0, '#7dd7ff');
+        sky.addColorStop(.58, '#ffd1e8');
+        sky.addColorStop(1, '#fff0a6');
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, width, height);
+        circle(width * .8, height * .17, Math.min(width, height) * .13, 'rgba(255,245,184,.78)');
+        const hillShift = (cameraX * .12 * scale) % (width + 360);
+        for (let i = 0; i < 4; i += 1) {
+          oval(i * 360 - hillShift, height * .62, 360, 220, 'rgba(82,184,110,.4)');
+        }
+        const flowerShift = (cameraX * .35 * scale) % (width + 180);
+        for (let i = 0; i < 9; i += 1) {
+          const fx = i * 145 - flowerShift;
+          const fy = height * .72 + (i % 2) * 30;
+          line(fx, fy + 30, fx, fy + 70, '#328e45', 4 * scale);
+          for (let petal = 0; petal < 6; petal += 1) {
+            const angle = petal * 1.047;
+            circle(fx + Math.cos(angle) * 15 * scale, fy + Math.sin(angle) * 15 * scale, 11 * scale, '#e85d75');
+          }
+          circle(fx, fy, 9 * scale, '#ffd166');
+        }
+        return;
+      }
+      if (stage === 5) {
+        const core = ctx.createLinearGradient(0, 0, 0, height);
+        core.addColorStop(0, '#08131d');
+        core.addColorStop(.55, '#173040');
+        core.addColorStop(1, '#0c1017');
+        ctx.fillStyle = core;
+        ctx.fillRect(0, 0, width, height);
+        for (let i = 0; i < 7; i += 1) {
+          const x = (i * 220 - (cameraX * .22 * scale) % (width + 220));
+          roundedRect(x, height * .1, 26 * scale, height * .75, 6 * scale, 'rgba(55,180,214,.16)');
+        }
+        circle(width * .82, height * .24, Math.min(width, height) * .18, 'rgba(78,219,255,.18)');
+        for (let ring = 0; ring < 4; ring += 1) {
+          ctx.strokeStyle = 'rgba(78,219,255,.52)';
+          ctx.lineWidth = 3 * scale;
+          ctx.beginPath();
+          ctx.arc(width * .82, height * .24, (70 + ring * 28) * scale, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        return;
+      }
+      if (stage === 6) {
+        const meadow = ctx.createLinearGradient(0, 0, 0, height);
+        meadow.addColorStop(0, '#b7e47c');
+        meadow.addColorStop(.62, '#8fd36e');
+        meadow.addColorStop(1, '#74b85a');
+        ctx.fillStyle = meadow;
+        ctx.fillRect(0, 0, width, height);
+        const hillShift = (cameraX * .08 * scale) % (width + 260);
+        for (let i = 0; i < 5; i += 1) {
+          oval(i * 280 - hillShift, height * .62, 280, 180, 'rgba(78,150,72,.34)');
+        }
+        return;
+      }
+      if (stage === 8) {
+        drawStormPacific();
+        return;
+      }
+      if (stage === 9) {
+        const sky = ctx.createLinearGradient(0, 0, 0, height);
+        sky.addColorStop(0, '#120b2b');
+        sky.addColorStop(.52, '#271753');
+        sky.addColorStop(1, '#3e2c77');
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, width, height);
+        for (let i = 0; i < 42; i += 1) {
+          const x = ((i * 173 - cameraX * .14 * scale) % (width + 120)) - 60;
+          const y = 30 + ((i * 97) % (height * .68));
+          circle(x, y, (1.6 + (i % 4) * .8) * scale, 'rgba(255,255,255,.52)');
+        }
+        const bands = ['rgba(255,107,107,.24)', 'rgba(255,209,102,.24)', 'rgba(127,212,93,.24)', 'rgba(78,219,255,.24)', 'rgba(139,124,255,.24)', 'rgba(255,143,171,.24)'];
+        bands.forEach((band, index) => {
+          ctx.fillStyle = band;
+          ctx.fillRect(0, height * .7 + index * 20 * scale, width, 16 * scale);
+        });
+        return;
+      }
+      const sky = ctx.createLinearGradient(0, 0, 0, height);
+      sky.addColorStop(0, '#55c7f7');
+      sky.addColorStop(.55, '#84dccf');
+      sky.addColorStop(1, '#f8e9a1');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, width, height);
+      circle(width * .78, height * .18, Math.min(width, height) * .16, 'rgba(255,245,184,.68)');
+
+      const farShift = (cameraX * .15 * scale) % (width + 240);
+      for (let i = 0; i < 4; i += 1) {
+        mountain(i * 420 - farShift, height * .68, 260, 230, 'rgba(59,142,165,.4)');
+        mountain(i * 420 + 150 - farShift, height * .70, 230, 180, 'rgba(103,185,154,.34)');
+      }
+
+      const cloudShift = (cameraX * .28 * scale) % (width + 180);
+      for (let i = 0; i < 5; i += 1) {
+        const x = i * 290 - cloudShift;
+        const y = 92 + (i % 3) * 54;
+        roundedRect(x, y, 150, 34, 22, 'rgba(255,255,255,.72)');
+        circle(x + 36, y + 8, 34, 'rgba(255,255,255,.78)');
+        circle(x + 88, y - 6, 42, 'rgba(255,255,255,.74)');
+      }
+    }
+
+    function mountain(x, baseY, w, h, color) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(x, baseY);
+      ctx.lineTo(x + w * .5, baseY - h);
+      ctx.lineTo(x + w, baseY);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function sx(x) { return (x - cameraX) * scale; }
+    function sy(y) { return y * scale; }
+
+    function drawPlatform(platform) {
+      const x = sx(platform.x);
+      const y = sy(platform.y);
+      const w = platform.w * scale;
+      const h = platform.h * scale;
+      if (stage === 2) {
+        oval(x + w * .12, y + h * .82, w * .76, h * .32, 'rgba(0,0,0,.2)');
+        roundedRect(x + w * .43, y + h * .45, w * .14, h * 1.1, 20 * scale, '#f9f1d0');
+        oval(x, y - h * .32, w, h * 1.45, '#e85d75');
+        oval(x + w * .12, y - h * .08, w * .18, h * .45, '#fff6f6');
+        oval(x + w * .42, y - h * .22, w * .2, h * .52, '#fff6f6');
+        oval(x + w * .72, y + h * .02, w * .18, h * .42, '#fff6f6');
+        line(x + w * .08, y + h * .18, x + w * .92, y + h * .18, 'rgba(255,255,255,.6)', 3 * scale);
+        return;
+      }
+      if (stage === 3) {
+        oval(x + w * .12, y + h * .72, w * .76, h * .45, 'rgba(0,0,0,.34)');
+        oval(x, y - h * .35, w, h * 1.55, '#8e8a93');
+        oval(x + w * .12, y - h * .17, w * .25, h * .45, '#b8b3bd');
+        oval(x + w * .46, y + h * .02, w * .18, h * .34, '#6f6b74');
+        oval(x + w * .7, y - h * .1, w * .2, h * .42, '#5b5760');
+        line(x + w * .08, y + h * .22, x + w * .9, y + h * .05, 'rgba(216,213,224,.6)', 3 * scale);
+        return;
+      }
+      if (stage === 4) {
+        roundedRect(x, y, w, h, 14 * scale, '#74d65d');
+        roundedRect(x, y + h * .45, w, h * .55, 8 * scale, '#9b6b43');
+        for (let i = 0; i < Math.max(1, Math.floor(platform.w / 86)); i += 1) {
+          const fx = x + (i * 86 + 32) * scale;
+          const fy = y - 8 * scale;
+          circle(fx - 7 * scale, fy, 7 * scale, '#e85d75');
+          circle(fx + 7 * scale, fy, 7 * scale, '#ff8da1');
+          circle(fx, fy, 5 * scale, '#ffd166');
+        }
+        return;
+      }
+      if (stage === 5) {
+        roundedRect(x, y, w, h, 10 * scale, '#9bb1c8');
+        roundedRect(x, y + h * .35, w, h * .65, 10 * scale, '#47596d');
+        for (let i = 0; i < Math.max(1, Math.floor(platform.w / 70)); i += 1) {
+          line(x + (18 + i * 70) * scale, y + 6 * scale, x + (42 + i * 70) * scale, y + h - 6 * scale, '#0e1820', 3 * scale);
+        }
+        return;
+      }
+      if (stage === 6) {
+        roundedRect(x, y, w, h, 10 * scale, '#7fd45d');
+        roundedRect(x, y + h * .2, w, h * .8, 10 * scale, '#52983f');
+        line(x, y + h * .18, x + w, y + h * .18, 'rgba(200,240,138,.6)', 4 * scale);
+        return;
+      }
+      if (stage === 8) {
+        roundedRect(x, y, w, h, 10 * scale, '#b9c9d7');
+        roundedRect(x, y + h * .24, w, h * .76, 10 * scale, '#5e7286');
+        for (let i = 0; i < Math.max(1, Math.floor(platform.w / 68)); i += 1) {
+          circle(x + (24 + i * 68) * scale, y + 10 * scale, 3.5 * scale, '#23384c');
+          circle(x + (24 + i * 68) * scale, y + h - 10 * scale, 3.5 * scale, '#23384c');
+        }
+        return;
+      }
+      if (stage === 9) {
+        const rainbow = ['#ff6b6b', '#ffd166', '#7fd45d', '#4edbff', '#8b7cff', '#ff8fab'];
+        rainbow.forEach((color, index) => {
+          ctx.fillStyle = color;
+          ctx.fillRect(x, y + h * index / rainbow.length, w, h / rainbow.length + 1);
+        });
+        line(x, y + 12 * scale, x + w, y + 12 * scale, 'rgba(255,255,255,.44)', 3 * scale);
+        return;
+      }
+      roundedRect(x, y, w, h, 12 * scale, '#38b000');
+      roundedRect(x, y + h * .42, w, h * .58, 8 * scale, '#785034');
+      for (let i = 0; i < Math.floor(platform.w / 70); i += 1) {
+        line(x + i * 70 * scale, y + h * .48, x + (i * 70 + 38) * scale, y + h, 'rgba(58,40,27,.34)', 3 * scale);
+      }
+    }
+
+    function drawEgg(egg) {
+      const x = sx(egg.x);
+      const y = sy(egg.y);
+      circle(x, y, 40 * scale, 'rgba(255,255,255,.22)');
+      oval(x - 15 * scale, y - 20 * scale, 30 * scale, 40 * scale, '#ffffff');
+      circle(x - 6 * scale, y - 6 * scale, 5 * scale, '#39a66b');
+      circle(x + 7 * scale, y + 3 * scale, 4.5 * scale, '#e85d75');
+      ctx.strokeStyle = '#7fdca1';
+      ctx.lineWidth = 3 * scale;
+      ctx.beginPath();
+      ctx.ellipse(x, y, 15 * scale, 20 * scale, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    function drawEggShot(shot) {
+      const x = sx(shot.x);
+      const y = sy(shot.y);
+      circle(x, y, 26 * scale, 'rgba(255,255,255,.22)');
+      oval(x - 14 * scale, y - 17 * scale, 28 * scale, 34 * scale, '#ffffff');
+      circle(x - 5 * scale, y - 5 * scale, 4.5 * scale, '#39a66b');
+      circle(x + 6 * scale, y + 4 * scale, 4 * scale, '#e85d75');
+    }
+
+    function bossAttackEggX(egg) {
+      const t = Math.max(0, Math.min(1, egg.progress));
+      return egg.startX + (egg.targetX - egg.startX) * t;
+    }
+
+    function bossAttackEggY(egg) {
+      const t = Math.max(0, Math.min(1, egg.progress));
+      return egg.startY + (egg.targetY - egg.startY) * t - Math.sin(t * Math.PI) * 180;
+    }
+
+    function drawBossAttackEgg(egg) {
+      if (egg.warning > 0) {
+        let px = sx(egg.startX);
+        let py = sy(egg.startY);
+        for (let i = 1; i <= 16; i += 1) {
+          const t = i / 16;
+          const x = sx(egg.startX + (egg.targetX - egg.startX) * t);
+          const y = sy(egg.startY + (egg.targetY - egg.startY) * t - Math.sin(t * Math.PI) * 180);
+          line(px, py, x, y, 'rgba(255,209,102,.8)', 3 * scale);
+          px = x;
+          py = y;
+        }
+        ctx.strokeStyle = 'rgba(232,93,117,.4)';
+        ctx.lineWidth = 4 * scale;
+        ctx.beginPath();
+        ctx.arc(sx(egg.targetX), sy(egg.targetY), 22 * scale, 0, Math.PI * 2);
+        ctx.stroke();
+        return;
+      }
+      const x = sx(bossAttackEggX(egg));
+      const y = sy(bossAttackEggY(egg));
+      circle(x, y, 30 * scale, 'rgba(255,209,102,.3)');
+      oval(x - 16 * scale, y - 20 * scale, 32 * scale, 40 * scale, '#ffffff');
+      circle(x - 5 * scale, y - 6 * scale, 5 * scale, '#e85d75');
+      circle(x + 7 * scale, y + 4 * scale, 5 * scale, '#39a66b');
+    }
+
+    function drawFlowerBoss(now) {
+      const bossX = worldWidth - 360;
+      const x = sx(bossX);
+      const y = sy(560);
+      const sway = Math.sin(now * .006) * 8 * scale;
+      line(x, y + 130 * scale, x + sway, y + 10 * scale, '#2f915f', 16 * scale);
+      oval(x - 88 * scale, y + 70 * scale, 60 * scale, 28 * scale, '#39a66b');
+      oval(x + 28 * scale, y + 70 * scale, 60 * scale, 28 * scale, '#39a66b');
+      const petalColor = bossHitFlash > 0 ? '#ffffff' : '#e85d75';
+      for (let i = 0; i < 10; i += 1) {
+        const angle = i * .628 + now * .00025;
+        oval(
+          x + sway + Math.cos(angle) * 58 * scale - 28 * scale,
+          y + Math.sin(angle) * 58 * scale - 24 * scale,
+          56 * scale,
+          48 * scale,
+          petalColor
+        );
+      }
+      circle(x + sway, y, 58 * scale, '#ffd166');
+      circle(x + sway - 18 * scale, y - 8 * scale, 6 * scale, '#101820');
+      circle(x + sway + 18 * scale, y - 8 * scale, 6 * scale, '#101820');
+      roundedRect(x + sway - 24 * scale, y + 18 * scale, 48 * scale, 10 * scale, 8 * scale, '#7a1f30');
+      roundedRect(x - 74 * scale, y - 100 * scale, 148 * scale, 14 * scale, 8 * scale, 'rgba(16,24,32,.68)');
+      roundedRect(x - 70 * scale, y - 96 * scale, 140 * (bossHealth / 10) * scale, 6 * scale, 6 * scale, '#e85d75');
+    }
+
+    function drawEnemy(enemy, now) {
+      const pull = Math.max(0, Math.min(1, enemy.eaten));
+      const targetX = player.x + (facing > 0 ? 48 : 4);
+      const targetY = player.y + 22;
+      const worldX = pull > 0 ? enemy.fromX + (targetX - enemy.fromX) * pull : enemy.x;
+      const worldY = pull > 0 ? enemy.fromY + (targetY - enemy.fromY) * pull : enemy.y;
+      const shrink = pull > 0 ? Math.max(.32, 1 - pull * .55) : 1;
+      const enemyScale = scale * shrink;
+      const enemyBounce = Math.sin(now * .011 + enemy.start * .01) * 3 * scale;
+      const x = sx(worldX);
+      const y = sy(worldY) + (pull > 0 || enemy.grabbed || enemy.thrown ? 0 : enemyBounce);
+      if (enemy.grabbed) {
+        line(sx(targetX), sy(targetY), x + 27 * enemyScale, y + 27 * enemyScale, 'rgba(232,93,117,.54)', 5 * scale);
+        ctx.strokeStyle = 'rgba(255,209,102,.27)';
+        ctx.lineWidth = 3 * scale;
+        ctx.beginPath();
+        ctx.arc(sx(player.x + 28), sy(player.y + 28), (42 + enemy.spinTaps * 8) * scale, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      oval(x + 5 * enemyScale, y + 47 * enemyScale, 45 * enemyScale, 10 * enemyScale, 'rgba(0,0,0,.34)');
+      roundedRect(x, y, 54 * enemyScale, 54 * enemyScale, 22 * enemyScale, '#d34d4d');
+      roundedRect(x + 12 * enemyScale, y + 14 * enemyScale, 30 * enemyScale, 22 * enemyScale, 12 * enemyScale, '#ffe6d0');
+      circle(x + 21 * enemyScale, y + 24 * enemyScale, 3.5 * enemyScale, '#101820');
+      circle(x + 33 * enemyScale, y + 24 * enemyScale, 3.5 * enemyScale, '#101820');
+      roundedRect(x + 8 * enemyScale, y + 6 * enemyScale, 38 * enemyScale, 10 * enemyScale, 10 * enemyScale, '#7a1f30');
+    }
+
+    function drawGoal() {
+      const x = sx(stageGoalX(stage));
+      const baseY = sy(stageGoalBaseY(stage));
+      line(x, baseY, x, baseY - 220 * scale, '#ffffff', 8 * scale);
+      ctx.fillStyle = '#39a66b';
+      ctx.beginPath();
+      ctx.moveTo(x, baseY - 210 * scale);
+      ctx.lineTo(x + 96 * scale, baseY - 178 * scale);
+      ctx.lineTo(x, baseY - 146 * scale);
+      ctx.closePath();
+      ctx.fill();
+      circle(x + 64 * scale, baseY - 178 * scale, 18 * scale, '#ffd166');
+      circle(x + 64 * scale, baseY - 178 * scale, 7 * scale, '#ffffff');
+    }
+
+    function drawTauntBat() {
+      const x = sx(stageGoalX(stage) - 80);
+      const y = sy(250);
+      const flap = Math.sin(performance.now() * .012) * 10 * scale;
+      oval(x - 30 * scale, y - 12 * scale, 60 * scale, 34 * scale, 'rgba(26,20,48,.8)');
+      ctx.fillStyle = '#23183c';
+      ctx.beginPath();
+      ctx.moveTo(x - 8 * scale, y - 4 * scale);
+      ctx.quadraticCurveTo(x - 52 * scale, y - 34 * scale - flap, x - 62 * scale, y + 8 * scale);
+      ctx.quadraticCurveTo(x - 38 * scale, y + 2 * scale, x - 8 * scale, y + 10 * scale);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(x + 8 * scale, y - 4 * scale);
+      ctx.quadraticCurveTo(x + 52 * scale, y - 34 * scale + flap, x + 62 * scale, y + 8 * scale);
+      ctx.quadraticCurveTo(x + 38 * scale, y + 2 * scale, x + 8 * scale, y + 10 * scale);
+      ctx.closePath();
+      ctx.fill();
+      circle(x - 10 * scale, y - 3 * scale, 4 * scale, '#ffd166');
+      circle(x + 10 * scale, y - 3 * scale, 4 * scale, '#ffd166');
+
+      roundedRect(x - 168 * scale, y - 146 * scale, 336 * scale, 92 * scale, 18 * scale, 'rgba(254,245,255,.92)');
+      ctx.fillStyle = 'rgba(254,245,255,.92)';
+      ctx.beginPath();
+      ctx.moveTo(x + 42 * scale, y - 54 * scale);
+      ctx.lineTo(x + 18 * scale, y - 22 * scale);
+      ctx.lineTo(x + 70 * scale, y - 44 * scale);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#221c34';
+      ctx.font = `${16 * scale}px system-ui`;
+      ctx.fillText('20점수를 모으지못했군!', x - 148 * scale, y - 114 * scale);
+      ctx.fillText('20점수되어야 스테이지를넘길수있다!', x - 148 * scale, y - 88 * scale);
+      ctx.fillText('크하하!', x - 148 * scale, y - 62 * scale);
+      ctx.fillText('다시버튼을 누르고다시해라!', x - 148 * scale, y - 36 * scale);
+    }
+
+    function drawStormPacific() {
+      const sky = ctx.createLinearGradient(0, 0, 0, height);
+      sky.addColorStop(0, '#18304f');
+      sky.addColorStop(.55, '#21597b');
+      sky.addColorStop(1, '#5b8db0');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, width, height);
+      const cx = width * .74;
+      const cy = height * .2;
+      ctx.strokeStyle = `rgba(255,255,255,${.1 + Math.sin(performance.now() * .002) * .04 + .04})`;
+      for (let ring = 0; ring < 5; ring += 1) {
+        ctx.lineWidth = 7 * scale;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, (170 - ring * 18) * scale, (110 - ring * 12) * scale, 0, (.26 + ring * .28) * Math.PI, 1.65 * Math.PI);
+        ctx.stroke();
+      }
+      for (let i = 0; i < 6; i += 1) {
+        oval(i * 220 - (cameraX * .34 * scale) % (width + 220), height * .72 + (i % 2) * 16 * scale, 260 * scale, 120 * scale, 'rgba(68,177,216,.4)');
+      }
+    }
+
+    function drawGoldenDragon() {
+      if (stageEightDragonTimer <= 0) return;
+      const presence = Math.max(0, Math.min(1, stageEightDragonTimer / 2.8));
+      const exitShift = (1 - presence) * 340 * scale;
+      const dragonX = sx(2520) + exitShift;
+      const dragonY = sy(220);
+      ctx.fillStyle = '#ffc94a';
+      ctx.beginPath();
+      ctx.moveTo(dragonX - 148 * scale, dragonY + 22 * scale);
+      ctx.quadraticCurveTo(dragonX - 228 * scale, dragonY + 72 * scale, dragonX - 202 * scale, dragonY + 118 * scale);
+      ctx.lineTo(dragonX - 154 * scale, dragonY + 68 * scale);
+      ctx.closePath();
+      ctx.fill();
+      oval(dragonX - 116 * scale, dragonY - 4 * scale, 186 * scale, 90 * scale, '#ffd166');
+      ctx.fillStyle = '#ffe6a6';
+      ctx.beginPath();
+      ctx.moveTo(dragonX - 38 * scale, dragonY + 24 * scale);
+      ctx.quadraticCurveTo(dragonX + 10 * scale, dragonY + 62 * scale, dragonX + 62 * scale, dragonY + 30 * scale);
+      ctx.lineTo(dragonX + 44 * scale, dragonY + 58 * scale);
+      ctx.quadraticCurveTo(dragonX - 10 * scale, dragonY + 76 * scale, dragonX - 56 * scale, dragonY + 34 * scale);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,183,3,.85)';
+      ctx.beginPath();
+      ctx.moveTo(dragonX - 34 * scale, dragonY + 8 * scale);
+      ctx.lineTo(dragonX - 154 * scale, dragonY - 122 * scale);
+      ctx.lineTo(dragonX - 92 * scale, dragonY + 30 * scale);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,201,74,.8)';
+      ctx.beginPath();
+      ctx.moveTo(dragonX + 18 * scale, dragonY + 6 * scale);
+      ctx.lineTo(dragonX + 146 * scale, dragonY - 108 * scale);
+      ctx.lineTo(dragonX + 72 * scale, dragonY + 34 * scale);
+      ctx.closePath();
+      ctx.fill();
+      circle(dragonX + 116 * scale, dragonY + 10 * scale, 34 * scale, '#ffd166');
+      ctx.fillStyle = '#ffc94a';
+      ctx.beginPath();
+      ctx.moveTo(dragonX + 108 * scale, dragonY + 28 * scale);
+      ctx.lineTo(dragonX + 176 * scale, dragonY + 22 * scale);
+      ctx.lineTo(dragonX + 132 * scale, dragonY + 48 * scale);
+      ctx.closePath();
+      ctx.fill();
+      circle(dragonX + 126 * scale, dragonY + 4 * scale, 5 * scale, '#101820');
+      ctx.fillStyle = '#fff2c2';
+      ctx.beginPath();
+      ctx.moveTo(dragonX + 98 * scale, dragonY - 8 * scale);
+      ctx.lineTo(dragonX + 112 * scale, dragonY - 34 * scale);
+      ctx.lineTo(dragonX + 122 * scale, dragonY - 4 * scale);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(dragonX + 122 * scale, dragonY - 6 * scale);
+      ctx.lineTo(dragonX + 142 * scale, dragonY - 28 * scale);
+      ctx.lineTo(dragonX + 144 * scale, dragonY + 2 * scale);
+      ctx.closePath();
+      ctx.fill();
+      for (let i = 0; i < 4; i += 1) {
+        const sxp = dragonX - 52 * scale + i * 28 * scale;
+        ctx.fillStyle = '#ffb703';
+        ctx.beginPath();
+        ctx.moveTo(sxp, dragonY + 4 * scale);
+        ctx.lineTo(sxp + 10 * scale, dragonY - 16 * scale);
+        ctx.lineTo(sxp + 18 * scale, dragonY + 6 * scale);
+        ctx.closePath();
+        ctx.fill();
+      }
+      if (stageEightLaserTimer > 0) {
+        line(dragonX + 172 * scale, dragonY + 24 * scale, sx(2520), sy(620), 'rgba(255,241,168,.85)', 10 * scale);
+      }
+    }
+
+    function drawFinalGoldenDragon(now, dragonWorldX) {
+      const x = sx(dragonWorldX);
+      const y = sy(260);
+      const bob = Math.sin(now * .006) * 10 * scale;
+      ctx.fillStyle = 'rgba(255,183,3,.8)';
+      ctx.beginPath();
+      ctx.moveTo(x - 40 * scale, y + 40 * scale);
+      ctx.lineTo(x - 250 * scale, y - 140 * scale + bob);
+      ctx.lineTo(x - 150 * scale, y + 70 * scale);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,209,102,.8)';
+      ctx.beginPath();
+      ctx.moveTo(x + 80 * scale, y + 30 * scale);
+      ctx.lineTo(x + 300 * scale, y - 120 * scale - bob);
+      ctx.lineTo(x + 170 * scale, y + 90 * scale);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#ffc94a';
+      ctx.beginPath();
+      ctx.moveTo(x - 220 * scale, y + 120 * scale);
+      ctx.quadraticCurveTo(x - 360 * scale, y + 190 * scale, x - 290 * scale, y + 260 * scale);
+      ctx.lineTo(x - 190 * scale, y + 180 * scale);
+      ctx.closePath();
+      ctx.fill();
+      oval(x - 180 * scale, y + 10 * scale, 320 * scale, 150 * scale, '#ffd166');
+      oval(x - 46 * scale, y + 56 * scale, 142 * scale, 76 * scale, '#ffe6a6');
+      circle(x + 176 * scale, y + 52 * scale, 60 * scale, '#ffd166');
+      ctx.fillStyle = '#ffc94a';
+      ctx.beginPath();
+      ctx.moveTo(x + 158 * scale, y + 82 * scale);
+      ctx.lineTo(x + 286 * scale, y + 70 * scale);
+      ctx.lineTo(x + 208 * scale, y + 122 * scale);
+      ctx.closePath();
+      ctx.fill();
+      circle(x + 194 * scale, y + 36 * scale, 8 * scale, '#101820');
+      for (let i = 0; i < 7; i += 1) {
+        const sxp = x - 104 * scale + i * 38 * scale;
+        ctx.fillStyle = '#ff8c42';
+        ctx.beginPath();
+        ctx.moveTo(sxp, y + 18 * scale);
+        ctx.lineTo(sxp + 14 * scale, y - 18 * scale);
+        ctx.lineTo(sxp + 24 * scale, y + 16 * scale);
+        ctx.closePath();
+        ctx.fill();
+      }
+      circle(x + 120 * scale, y + 80 * scale, 120 * scale, 'rgba(255,209,102,.18)');
+    }
+
+    function drawCoreOrb() {
+      if (stage !== 5 || coreOrbClaimed) return;
+      const x = sx(worldWidth - 240);
+      const y = sy(560);
+      circle(x, y, 54 * scale, 'rgba(78,219,255,.18)');
+      circle(x, y, 26 * scale, '#7be6ff');
+      circle(x, y, 10 * scale, '#ffffff');
+      for (let ring = 0; ring < 3; ring += 1) {
+        ctx.strokeStyle = 'rgba(78,219,255,.52)';
+        ctx.lineWidth = 3 * scale;
+        ctx.beginPath();
+        ctx.arc(x, y, (34 + ring * 14) * scale, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+
+    function drawTree(tree) {
+      const x = sx(tree.x);
+      const baseY = sy(tree.y);
+      roundedRect(x - 16 * scale, baseY - 110 * scale, 32 * scale, 110 * scale, 8 * scale, '#825634');
+      circle(x - 22 * scale, baseY - 126 * scale, 34 * scale, '#4d9e49');
+      circle(x, baseY - 144 * scale, 32 * scale, '#4d9e49');
+      circle(x + 22 * scale, baseY - 126 * scale, 34 * scale, '#4d9e49');
+    }
+
+    function drawAppleItem(apple) {
+      const x = sx(apple.x);
+      const y = sy(apple.y);
+      if (apple.age >= 5) {
+        const colors = ['#ff595e', '#ffca3a', '#8ac926', '#1982c4', '#6a4c93'];
+        colors.forEach((color, index) => {
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.arc(x, y, 16 * scale, index * Math.PI * 2 / 5, (index + 1) * Math.PI * 2 / 5);
+          ctx.closePath();
+          ctx.fill();
+        });
+        circle(x, y, 24 * scale, 'rgba(255,255,255,.18)');
+      } else {
+        circle(x, y, 22 * scale, 'rgba(255,107,107,.22)');
+        circle(x, y, 16 * scale, '#e64848');
+      }
+      line(x, y - 10 * scale, x + 2 * scale, y - 24 * scale, '#6b4a2c', 3 * scale);
+      oval(x + 2 * scale, y - 24 * scale, 12 * scale, 7 * scale, '#7fd45d');
+    }
+
+    function drawGiantBoss(now) {
+      if (!giantBoss || (giantBoss.health <= 0 && giantBoss.deathTimer <= 0)) return;
+      const x = sx(giantBoss.x);
+      const deathProgress = giantBoss.health <= 0 ? 1 - Math.max(0, Math.min(1, giantBoss.deathTimer / 1.6)) : 0;
+      const y = sy(650 + giantBoss.deathFall);
+      const bob = Math.sin(now * .006) * 6 * scale * (1 - deathProgress);
+      const pushLean = giantBoss.pushTimer > 0 ? giantBoss.dir * 22 * scale : 0;
+      const alpha = Math.max(0, 1 - deathProgress * .78);
+      const squash = 1 - deathProgress * .34;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      oval(x - 130 * scale, y + 68 * scale, 260 * scale, 28 * scale, 'rgba(0,0,0,.34)');
+      ctx.fillStyle = '#5f7e4a';
+      ctx.beginPath();
+      ctx.moveTo(x - 72 * scale - pushLean, y + 32 * scale);
+      ctx.lineTo(x - 188 * scale - pushLean, y - 8 * scale);
+      ctx.lineTo(x - 112 * scale - pushLean, y + 56 * scale);
+      ctx.closePath();
+      ctx.fill();
+      oval(x - 74 * scale - pushLean * .5, y - 10 * scale + bob, 148 * scale, 86 * scale * squash, '#6c8f4e');
+      circle(x + 78 * scale + pushLean, y - 8 * scale + bob, 52 * scale * squash, '#6c8f4e');
+      oval(x - 26 * scale, y + 8 * scale + bob, 72 * scale, 46 * scale * squash, '#eaf5d8');
+      for (let i = 0; i < 6; i += 1) {
+        const sxp = x - 36 * scale + i * 24 * scale;
+        ctx.fillStyle = '#e85d75';
+        ctx.beginPath();
+        ctx.moveTo(sxp, y - 8 * scale + bob);
+        ctx.lineTo(sxp + 10 * scale, y - 28 * scale + bob);
+        ctx.lineTo(sxp + 20 * scale, y - 8 * scale + bob);
+        ctx.closePath();
+        ctx.fill();
+      }
+      circle(x + 96 * scale + pushLean, y - 24 * scale + bob, 14 * scale, '#ffffff');
+      circle(x + 100 * scale + pushLean, y - 24 * scale + bob, 6 * scale, '#101820');
+      roundedRect(x + 110 * scale + pushLean, y - 2 * scale + bob, 42 * scale, 12 * scale, 6 * scale, '#7a1f30');
+      ctx.restore();
+      if (deathProgress > 0) {
+        for (let i = 0; i < 4; i += 1) {
+          circle(
+            x - 56 * scale + i * 34 * scale,
+            y - 22 * scale - i * 8 * scale,
+            (8 + i) * scale * (1 - deathProgress * .45),
+            `rgba(255, 209, 102, ${Math.max(0, .8 - deathProgress * .5)})`
+          );
+        }
+      }
+    }
+
+    function drawPlayer(now) {
+      const phase = now * .012;
+      const stride = Math.sin(phase);
+      const counterStride = Math.sin(phase + Math.PI);
+      const runningAmount = player.grounded ? Math.min(1, Math.abs(player.vx) / 430) : .35;
+      const jumpPose = player.grounded ? 0 : 1;
+      const risingPose = !player.grounded && player.vy < 0 ? 1 : 0;
+      const bodyBob = player.grounded ? Math.abs(stride) * -4 * runningAmount * scale : -3 * scale;
+      const tailWag = (stride * 7 * runningAmount + jumpPose * (risingPose ? -7 : 5)) * scale;
+      const headBob = player.grounded ? counterStride * 2.5 * runningAmount * scale : (risingPose ? -5 : 3) * scale;
+      const footLiftA = player.grounded ? Math.max(0, stride) * 7 * runningAmount * scale : 13 * scale;
+      const footLiftB = player.grounded ? Math.max(0, -stride) * 7 * runningAmount * scale : 10 * scale;
+      const footTuckA = player.grounded ? 0 : 7 * scale;
+      const footTuckB = player.grounded ? 0 : -6 * scale;
+      const x = sx(player.x);
+      const y = sy(player.y) + bodyBob;
+      const mouthX = x + (facing > 0 ? 51 : 7) * scale;
+      const mouthY = y + 23 * scale + headBob;
+      if (transformed && heatRayTimer > 0) {
+        const beamLength = 360 * scale;
+        const beamX = facing > 0 ? mouthX : mouthX - beamLength;
+        const beam = ctx.createLinearGradient(beamX, mouthY, beamX + beamLength, mouthY);
+        beam.addColorStop(0, 'rgba(139,232,255,.72)');
+        beam.addColorStop(.55, '#4edbff');
+        beam.addColorStop(1, '#ffffff');
+        roundedRect(beamX, mouthY - 10 * scale, beamLength, 20 * scale, 10 * scale, beam);
+      }
+      if (tongueTimer > 0) {
+        const tongueDuration = tonguePower > 1 ? .28 : .18;
+        const tongueLength = (95 * tonguePower + 30 * tonguePower * (tongueTimer / tongueDuration)) * scale;
+        roundedRect(
+          facing > 0 ? mouthX : mouthX - tongueLength,
+          mouthY - 5 * scale,
+          tongueLength,
+          10 * scale,
+          8 * scale,
+          '#e85d75'
+        );
+        circle(mouthX + facing * tongueLength, mouthY, 8 * scale, '#ff8da1');
+      }
+      oval(x + 8 * scale, y + 70 * scale, 48 * scale, 10 * scale, 'rgba(0,0,0,.27)');
+      const rainbowBody = rainbowTimer > 0;
+      const bodyColor = rainbowBody ? '#ffd166' : (transformed ? '#2a3643' : '#39a66b');
+      const tailColor = transformed ? '#22303c' : '#2f915f';
+      const bellyColor = rainbowBody ? '#fff6d6' : (transformed ? '#8ea1b1' : '#e9ffe7');
+      const faceColor = rainbowBody ? '#ff8fab' : (transformed ? '#70879a' : '#7fdca1');
+      const mouthColor = rainbowBody ? '#6ed7ff' : (transformed ? '#4edbff' : '#e85d75');
+      ctx.fillStyle = tailColor;
+      ctx.beginPath();
+      if (facing > 0) {
+        ctx.moveTo(x + 14 * scale, y + 43 * scale);
+        ctx.lineTo(x - 18 * scale, y + 31 * scale + tailWag);
+        ctx.lineTo(x + 8 * scale, y + 57 * scale);
+      } else {
+        ctx.moveTo(x + 44 * scale, y + 43 * scale);
+        ctx.lineTo(x + 76 * scale, y + 31 * scale + tailWag);
+        ctx.lineTo(x + 50 * scale, y + 57 * scale);
+      }
+      ctx.closePath();
+      ctx.fill();
+      oval(x + 10 * scale, y + 26 * scale, 38 * scale, 46 * scale, bodyColor);
+      oval(x + 17 * scale, y + 37 * scale, 23 * scale, 29 * scale, bellyColor);
+      circle(x + 30 * scale, y + 22 * scale + headBob, 23 * scale, bodyColor);
+      for (let i = 0; i < (transformed ? 5 : 4); i += 1) {
+        const spikeX = x + (16 + i * 8) * scale;
+        const spikeY = y + (2 + i % 2 * 2) * scale + headBob * .45;
+        ctx.fillStyle = transformed ? '#6ed7ff' : '#e85d75';
+        ctx.beginPath();
+        ctx.moveTo(spikeX, spikeY + 12 * scale);
+        ctx.lineTo(spikeX + 5 * scale, spikeY);
+        ctx.lineTo(spikeX + 10 * scale, spikeY + 12 * scale);
+        ctx.closePath();
+        ctx.fill();
+      }
+      oval(x + (facing > 0 ? 39 : -5) * scale, y + 12 * scale + headBob, 29 * scale, 20 * scale, faceColor);
+      circle(x + (30 + facing * 9) * scale, y + 12 * scale + headBob, 7 * scale, '#ffffff');
+      circle(x + (32 + facing * 10) * scale, y + 12 * scale + headBob, 3 * scale, '#101820');
+      roundedRect(x + (facing > 0 ? 57 : -7) * scale, y + 24 * scale + headBob, 11 * scale, 5 * scale, 4 * scale, mouthColor);
+      roundedRect(x + (facing > 0 ? 39 : 13) * scale, y + (player.grounded ? 44 : 39) * scale, 16 * scale, 6 * scale, 5 * scale, tailColor);
+      roundedRect(x + 8 * scale + footTuckA, y + 68 * scale - footLiftA, 18 * scale, 9 * scale, 4 * scale, '#101820');
+      roundedRect(x + 35 * scale + footTuckB, y + 68 * scale - footLiftB, 18 * scale, 9 * scale, 4 * scale, '#101820');
+    }
+
+    function draw(now) {
+      drawSky();
+      platforms.forEach(drawPlatform);
+      eggs.filter(egg => !egg.got).forEach(drawEgg);
+      bossEggs.filter(egg => !egg.got).forEach(drawEgg);
+      bossAttackEggs.filter(egg => !egg.got).forEach(drawBossAttackEgg);
+      eggShots.forEach(drawEggShot);
+      enemies.filter(enemy => enemy.alive || enemy.eaten > 0 || enemy.grabbed || enemy.thrown).forEach(enemy => drawEnemy(enemy, now));
+      trees.forEach(drawTree);
+      apples.filter(apple => !apple.got).forEach(drawAppleItem);
+      drawGiantBoss(now);
+      if (stage === 8) drawGoldenDragon();
+      if (stage === 9) drawFinalGoldenDragon(now, stageNineDragonX);
+      drawGoal();
+      if (stage >= 1 && stage <= 6 && player.x > stageGoalX(stage) - 200 && score < 20) drawTauntBat();
+      drawCoreOrb();
+      if (stage === 4 && bossHealth > 0) drawFlowerBoss(now);
+      drawPlayer(now);
+    }
+
+    let last = performance.now();
+    function frame(now) {
+      const dt = Math.min(.033, (now - last) / 1000);
+      last = now;
+      update(dt);
+      draw(now);
+      requestAnimationFrame(frame);
+    }
+
+    loadStage(1);
+    resize();
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>

@@ -8,5 +8,7 @@ data class ReminderEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val text: String,
+    val styleSpansJson: String = "[]",
+    val isImportant: Boolean = false,
     val updatedAt: Long = System.currentTimeMillis(),
 )

@@ -9,5 +9,6 @@ data class ClipboardPhraseEntity(
     val id: Long = 0,
     val title: String,
     val content: String,
+    val isFavorite: Boolean = false,
     val updatedAt: Long = System.currentTimeMillis(),
 )

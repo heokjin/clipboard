@@ -53,6 +53,8 @@ import com.soctt.myclipboard.data.ClipboardRepository
 import com.soctt.myclipboard.data.ReminderRepository
 import com.soctt.myclipboard.data.local.ClipboardPhraseEntity
 import com.soctt.myclipboard.data.local.ReminderEntity
+import com.soctt.myclipboard.reminder.buildReminderWidgetText
+import com.soctt.myclipboard.reminder.styleSpans
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -167,7 +169,7 @@ private fun WidgetContent(
     )
     Log.d(
         WidgetDebugTag,
-        "WidgetContent size width=${size.width.value} height=${size.height.value} page=${currentPage.value} reminderRows=$reminderRows clipboardRows=$clipboardRows"
+        "WidgetContent size width=${size.width.value} height=${size.height.value} page=${currentPage.value} reminders=${reminders.size} phrases=${phrases.size} reminderRows=$reminderRows clipboardRows=$clipboardRows"
     )
     val openCurrentPageAction = actionStartActivity<MainActivity>(
         actionParametersOf(WidgetActionKeys.startPage to currentPage.value)
@@ -179,7 +181,11 @@ private fun WidgetContent(
             .background(WidgetColors.background)
             .padding(12.dp),
     ) {
-        Row(modifier = GlanceModifier.fillMaxWidth()) {
+        Row(
+            modifier = GlanceModifier
+                .fillMaxWidth()
+                .clickable(openCurrentPageAction)
+        ) {
             Row {
                 WidgetTabChip(
                     text = when (currentPage) {
@@ -206,11 +212,7 @@ private fun WidgetContent(
                 )
             }
 
-            Spacer(
-                modifier = GlanceModifier
-                    .defaultWeight()
-                    .clickable(openCurrentPageAction)
-            )
+            Spacer(modifier = GlanceModifier.defaultWeight())
 
             Image(
                 provider = androidx.glance.ImageProvider(R.drawable.ic_widget_refresh),
@@ -226,19 +228,16 @@ private fun WidgetContent(
         Column(
             modifier = GlanceModifier
                 .fillMaxWidth()
-                .defaultWeight()
-                .clickable(openCurrentPageAction),
+                .defaultWeight(),
         ) {
             when (currentPage) {
                 WidgetPage.Reminder -> ReminderWidgetList(
                     reminders = reminders,
-                    maxVisibleItems = reminderRows * if (isWide) 2 else 1,
                     columns = if (isWide) 2 else 1,
                 )
 
                 WidgetPage.Clipboard -> ClipboardWidgetList(
                     phrases = phrases,
-                    maxVisibleItems = clipboardRows * if (isWide) 2 else 1,
                     columns = if (isWide) 2 else 1,
                     isWide = isWide,
                 )
@@ -281,7 +280,6 @@ private fun WidgetTabChip(
 @androidx.compose.runtime.Composable
 private fun ReminderWidgetList(
     reminders: List<ReminderEntity>,
-    maxVisibleItems: Int,
     columns: Int,
 ) {
     val context = androidx.glance.LocalContext.current
@@ -296,26 +294,12 @@ private fun ReminderWidgetList(
         return
     }
 
-    val visibleItems = reminders.take(maxVisibleItems)
-    val rows = visibleItems.chunked(columns)
-    if (rows.size <= 10) {
-        Column(modifier = GlanceModifier.fillMaxSize()) {
-            rows.forEachIndexed { rowIndex, rowItems ->
-                ReminderWidgetRow(
-                    rowItems = rowItems,
-                    columns = columns,
-                    modifier = GlanceModifier
-                        .fillMaxWidth()
-                        .defaultWeight()
-                        .padding(bottom = if (rowIndex == rows.lastIndex) 0.dp else 6.dp),
-                )
-            }
-        }
-        return
-    }
-
+    val rows = reminders.chunked(columns)
     LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
-        items(rows) { rowItems ->
+        items(
+            items = rows,
+            itemId = { rowItems -> reminderRowStableId(rowItems) },
+        ) { rowItems ->
             ReminderWidgetRow(
                 rowItems = rowItems,
                 columns = columns,
@@ -337,10 +321,10 @@ private fun ReminderWidgetRow(
         rowItems.forEachIndexed { itemIndex, reminder ->
             ReminderWidgetItem(
                 reminder = reminder,
-                modifier = if (columns > 1) {
+                modifier = if (columns > 1 && rowItems.size == columns) {
                     GlanceModifier.defaultWeight().fillMaxHeight()
                 } else {
-                    GlanceModifier.fillMaxSize()
+                    GlanceModifier.fillMaxWidth()
                 },
             )
             if (columns > 1 && itemIndex != rowItems.lastIndex) {
@@ -359,7 +343,10 @@ private fun ReminderWidgetItem(
     modifier: GlanceModifier = GlanceModifier,
 ) {
     Text(
-        text = reminder.text,
+        text = buildReminderWidgetText(
+            text = reminder.text,
+            spans = reminder.styleSpans(),
+        ),
         modifier = modifier
             .background(WidgetColors.itemSurface)
             .clickable(
@@ -379,7 +366,6 @@ private fun ReminderWidgetItem(
 @androidx.compose.runtime.Composable
 private fun ClipboardWidgetList(
     phrases: List<ClipboardPhraseEntity>,
-    maxVisibleItems: Int,
     columns: Int,
     isWide: Boolean,
 ) {
@@ -395,27 +381,12 @@ private fun ClipboardWidgetList(
         return
     }
 
-    val visibleItems = phrases.take(maxVisibleItems)
-    val rows = visibleItems.chunked(columns)
-    if (rows.size <= 10) {
-        Column(modifier = GlanceModifier.fillMaxSize()) {
-            rows.forEachIndexed { rowIndex, rowItems ->
-                ClipboardWidgetRow(
-                    rowItems = rowItems,
-                    columns = columns,
-                    isWide = isWide,
-                    modifier = GlanceModifier
-                        .fillMaxWidth()
-                        .defaultWeight()
-                        .padding(bottom = if (rowIndex == rows.lastIndex) 0.dp else 6.dp),
-                )
-            }
-        }
-        return
-    }
-
+    val rows = phrases.chunked(columns)
     LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
-        items(rows) { rowItems ->
+        items(
+            items = rows,
+            itemId = { rowItems -> clipboardRowStableId(rowItems) },
+        ) { rowItems ->
             ClipboardWidgetRow(
                 rowItems = rowItems,
                 columns = columns,
@@ -425,6 +396,22 @@ private fun ClipboardWidgetList(
                     .padding(bottom = 6.dp),
             )
         }
+    }
+}
+
+private fun reminderRowStableId(
+    rowItems: List<ReminderEntity>,
+): Long {
+    return rowItems.fold(17L) { acc, item ->
+        (acc * 31L) + item.id
+    }
+}
+
+private fun clipboardRowStableId(
+    rowItems: List<ClipboardPhraseEntity>,
+): Long {
+    return rowItems.fold(17L) { acc, item ->
+        (acc * 31L) + item.id
     }
 }
 
@@ -439,10 +426,10 @@ private fun ClipboardWidgetRow(
         rowItems.forEachIndexed { itemIndex, phrase ->
             ClipboardWidgetItem(
                 phrase = phrase,
-                modifier = if (columns > 1) {
+                modifier = if (columns > 1 && rowItems.size == columns) {
                     GlanceModifier.defaultWeight().fillMaxHeight()
                 } else {
-                    GlanceModifier.fillMaxSize()
+                    GlanceModifier.fillMaxWidth()
                 },
                 contentMaxLines = if (isWide) 2 else 1,
             )
@@ -484,7 +471,16 @@ private fun ClipboardWidgetItem(
     modifier: GlanceModifier = GlanceModifier,
     contentMaxLines: Int,
 ) {
-    Column(
+    val combinedText = buildString {
+        append(phrase.title)
+        if (phrase.content.isNotBlank()) {
+            append("\n")
+            append(phrase.content)
+        }
+    }
+
+    Text(
+        text = combinedText,
         modifier = modifier
             .background(WidgetColors.itemSurface)
             .clickable(
@@ -493,25 +489,12 @@ private fun ClipboardWidgetItem(
                 )
             )
             .padding(horizontal = 10.dp, vertical = 8.dp),
-    ) {
-        Text(
-            text = phrase.title,
-            style = TextStyle(
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-            ),
-            maxLines = 1,
-        )
-        Spacer(modifier = GlanceModifier.height(2.dp))
-        Text(
-            text = phrase.content,
-            style = TextStyle(
-                fontSize = 11.sp,
-                color = ColorProvider(WidgetColors.subtleText),
-            ),
-            maxLines = contentMaxLines,
-        )
-    }
+        style = TextStyle(
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+        ),
+        maxLines = contentMaxLines + 1,
+    )
 }
 
 @androidx.compose.runtime.Composable

@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Still Floor</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #050607;
+      color: #f4eee4;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: crosshair;
+      touch-action: none;
+    }
+    .hud {
+      position: fixed;
+      left: 18px;
+      top: 18px;
+      display: grid;
+      gap: 8px;
+      width: min(320px, calc(100vw - 36px));
+      user-select: none;
+      pointer-events: none;
+    }
+    .title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-shadow: 0 2px 12px rgba(0, 0, 0, .85);
+    }
+    .bar {
+      height: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(244, 238, 228, .32);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .06);
+    }
+    .fill {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, #77b7b2, #d7e6cf);
+      transition: width .12s linear;
+    }
+    .status {
+      min-height: 20px;
+      margin: 0;
+      color: #d9d1c1;
+      font-size: 13px;
+      line-height: 1.35;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, .9);
+    }
+    .center {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: radial-gradient(circle at center, rgba(20, 19, 18, .6), rgba(0, 0, 0, .92));
+      text-align: center;
+    }
+    .panel {
+      width: min(520px, 100%);
+      padding: 24px;
+      border: 1px solid rgba(244, 238, 228, .16);
+      border-radius: 8px;
+      background: rgba(10, 11, 12, .78);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, .5);
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 32px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+    p {
+      margin: 0 0 18px;
+      color: #cfc7b8;
+      line-height: 1.6;
+    }
+    button {
+      height: 44px;
+      padding: 0 18px;
+      border: 0;
+      border-radius: 8px;
+      background: #9fc7bd;
+      color: #11100d;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .hint {
+      margin-top: 14px;
+      color: #9a9285;
+      font-size: 13px;
+    }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div class="hud">
+    <p class="title">Still Floor</p>
+    <div class="bar"><div class="fill" id="battery"></div></div>
+    <p class="status" id="status">너무 조용하다. 표식을 따라 출구를 찾아라.</p>
+  </div>
+  <div class="center" id="overlay">
+    <div class="panel">
+      <h1>Still Floor</h1>
+      <p>끝없이 비슷한 사무실 복도. 물소리도, 사람도 없다. 가끔 벽의 표식만 방향을 알려준다.</p>
+      <button id="start">시작</button>
+      <div class="hint">WASD / 방향키 이동 · 마우스로 보기 · F 형광등 깜빡임 · E 조사</div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const overlay = document.getElementById('overlay');
+    const statusEl = document.getElementById('status');
+    const batteryEl = document.getElementById('battery');
+
+    let width = 1;
+    let height = 1;
+    let ratio = 1;
+    let running = false;
+    let won = false;
+    let lost = false;
+    let messageTimer = 0;
+    let drift = 0;
+    let flicker = 0;
+
+    const tile = 72;
+    const map = [
+      '####################',
+      '#P.....#...........#',
+      '#.###..#.#####.###.#',
+      '#...#..#.....#...#.#',
+      '###.#..#####.###.#.#',
+      '#...#......#.....#.#',
+      '#.#######..#####.#.#',
+      '#.....#....#.....#.#',
+      '#.###.#.####.#####.#',
+      '#...#.#......#K....#',
+      '###.#.########.###.#',
+      '#...#..........#...#',
+      '#.##############.#D#',
+      '#..................#',
+      '####################'
+    ];
+
+    const walls = [];
+    const notes = [
+      { x: 5.5 * tile, y: 1.6 * tile, read: false, text: '복사 용지 위 메모: 같은 방을 세 번 지나면 다른 방이 된다.' },
+      { x: 10.4 * tile, y: 7.5 * tile, read: false, text: '벽의 표식: 물 냄새가 나는 쪽으로 가지 마라. 아직 아니다.' },
+      { x: 15.5 * tile, y: 11.5 * tile, read: false, text: '형광등 아래 글씨: 출구는 문처럼 생기지 않았다.' }
+    ];
+    let marker = { x: 16.6 * tile, y: 9.5 * tile, got: false };
+    let door = { x: 18.6 * tile, y: 12.5 * tile };
+
+    const player = { x: tile * 1.5, y: tile * 1.5, r: 16, speed: 190, angle: 0, battery: 100, light: true };
+    const keys = new Set();
+    const mouse = { x: innerWidth / 2, y: innerHeight / 2 };
+
+    function buildWalls() {
+      walls.length = 0;
+      for (let y = 0; y < map.length; y++) {
+        for (let x = 0; x < map[y].length; x++) {
+          if (map[y][x] === '#') walls.push({ x: x * tile, y: y * tile, w: tile, h: tile });
+        }
+      }
+    }
+
+    function resize() {
+      width = innerWidth;
+      height = innerHeight;
+      ratio = devicePixelRatio || 1;
+      canvas.width = Math.floor(width * ratio);
+      canvas.height = Math.floor(height * ratio);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      mouse.x = width / 2;
+      mouse.y = height / 2;
+    }
+
+    function setMessage(text, seconds = 2.2) {
+      statusEl.textContent = text;
+      messageTimer = seconds;
+    }
+
+    function reset() {
+      player.x = tile * 1.5;
+      player.y = tile * 1.5;
+      player.angle = 0;
+      player.battery = 100;
+      player.light = true;
+      notes.forEach(note => note.read = false);
+      marker.got = false;
+      won = false;
+      lost = false;
+      drift = 0;
+      setMessage('너무 조용하다. 표식을 따라 출구를 찾아라.', 3);
+    }
+
+    function rectCircle(rect, cx, cy, cr) {
+      const nx = Math.max(rect.x, Math.min(cx, rect.x + rect.w));
+      const ny = Math.max(rect.y, Math.min(cy, rect.y + rect.h));
+      return Math.hypot(cx - nx, cy - ny) < cr;
+    }
+
+    function moveEntity(entity, dx, dy) {
+      entity.x += dx;
+      for (const wall of walls) {
+        if (rectCircle(wall, entity.x, entity.y, entity.r)) {
+          entity.x -= dx;
+          break;
+        }
+      }
+      entity.y += dy;
+      for (const wall of walls) {
+        if (rectCircle(wall, entity.x, entity.y, entity.r)) {
+          entity.y -= dy;
+          break;
+        }
+      }
+    }
+
+    function hasLineOfSight(a, b) {
+      const steps = Math.ceil(Math.hypot(a.x - b.x, a.y - b.y) / 18);
+      for (let i = 1; i < steps; i++) {
+        const t = i / steps;
+        const x = a.x + (b.x - a.x) * t;
+        const y = a.y + (b.y - a.y) * t;
+        const tx = Math.floor(x / tile);
+        const ty = Math.floor(y / tile);
+        if (map[ty]?.[tx] === '#') return false;
+      }
+      return true;
+    }
+
+    function interact() {
+      if (!running || won || lost) return;
+      for (const note of notes) {
+        if (!note.read && Math.hypot(player.x - note.x, player.y - note.y) < 58) {
+          note.read = true;
+          setMessage(note.text, 4);
+          return;
+        }
+      }
+      if (!marker.got && Math.hypot(player.x - marker.x, player.y - marker.y) < 58) {
+        marker.got = true;
+        drift = 10;
+        setMessage('바닥의 젖은 표식이 손에 묻었다. 이제 흰 문이 보일 것이다.', 3);
+        return;
+      }
+      if (Math.hypot(player.x - door.x, player.y - door.y) < 66) {
+        if (marker.got) {
+          won = true;
+          overlay.classList.remove('hidden');
+          overlay.querySelector('h1').textContent = '밖이었다';
+          overlay.querySelector('p').textContent = '문을 지난 뒤에도 같은 형광등 소리가 천천히 따라왔다.';
+          overlay.querySelector('button').textContent = '다시 시작';
+        } else {
+          setMessage('문처럼 보이지만 아직 평평한 벽이다. 표식을 찾아야 한다.', 2.5);
+        }
+      }
+    }
+
+    function update(dt) {
+      if (!running || won || lost) return;
+      messageTimer -= dt;
+      if (messageTimer <= 0) statusEl.textContent = marker.got ? '흰 문을 찾아라. 복도는 조금씩 틀어지고 있다.' : '젖은 표식을 찾아라. E로 주변을 조사할 수 있다.';
+
+      let dx = 0;
+      let dy = 0;
+      if (keys.has('w') || keys.has('arrowup')) dy -= 1;
+      if (keys.has('s') || keys.has('arrowdown')) dy += 1;
+      if (keys.has('a') || keys.has('arrowleft')) dx -= 1;
+      if (keys.has('d') || keys.has('arrowright')) dx += 1;
+      const len = Math.hypot(dx, dy) || 1;
+      moveEntity(player, dx / len * player.speed * dt, dy / len * player.speed * dt);
+
+      player.angle = Math.atan2(mouse.y - height / 2, mouse.x - width / 2);
+      player.battery = 54 + Math.sin(flicker * 0.65) * 24 + Math.sin(flicker * 2.1) * 10;
+      batteryEl.style.width = `${Math.max(12, Math.min(100, player.battery))}%`;
+
+      if (marker.got && hasLineOfSight(player, door)) drift = Math.max(drift, 5);
+      drift = Math.max(0, drift - 8 * dt);
+      flicker += dt;
+    }
+
+    function drawWall(x, y, w, h) {
+      const gradient = ctx.createLinearGradient(x, y, x + w, y + h);
+      gradient.addColorStop(0, '#202124');
+      gradient.addColorStop(1, '#111315');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = 'rgba(255,255,255,.035)';
+      ctx.strokeRect(x + .5, y + .5, w - 1, h - 1);
+    }
+
+    function draw() {
+      const sx = Math.sin(flicker * 1.7) * drift;
+      const sy = Math.cos(flicker * 1.1) * drift;
+      const camX = player.x - width / 2 + sx;
+      const camY = player.y - height / 2 + sy;
+
+      ctx.fillStyle = '#050607';
+      ctx.fillRect(0, 0, width, height);
+      ctx.save();
+      ctx.translate(-camX, -camY);
+
+      ctx.fillStyle = '#0d0e10';
+      ctx.fillRect(0, 0, map[0].length * tile, map.length * tile);
+
+      for (let y = 0; y < map.length; y++) {
+        for (let x = 0; x < map[y].length; x++) {
+          if (map[y][x] !== '#') {
+            ctx.fillStyle = ((x + y) % 2 === 0) ? '#d8d4c6' : '#cfcbbb';
+            ctx.fillRect(x * tile, y * tile, tile, tile);
+            ctx.fillStyle = 'rgba(70,74,69,.1)';
+            ctx.fillRect(x * tile, y * tile, tile, 2);
+          }
+        }
+      }
+      walls.forEach(wall => drawWall(wall.x, wall.y, wall.w, wall.h));
+
+      for (const note of notes) {
+        if (note.read) continue;
+        ctx.fillStyle = '#d2c4a1';
+        ctx.fillRect(note.x - 11, note.y - 15, 22, 30);
+        ctx.fillStyle = 'rgba(0,0,0,.28)';
+        ctx.fillRect(note.x - 7, note.y - 7, 14, 2);
+        ctx.fillRect(note.x - 7, note.y, 10, 2);
+      }
+
+      if (!marker.got) {
+        ctx.strokeStyle = '#7fb7ad';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.arc(marker.x, marker.y, 16, 0, Math.PI * 2);
+        ctx.moveTo(marker.x - 28, marker.y + 22);
+        ctx.lineTo(marker.x + 30, marker.y + 22);
+        ctx.moveTo(marker.x, marker.y - 22);
+        ctx.lineTo(marker.x, marker.y + 34);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = marker.got ? '#edf2e8' : '#a9a99f';
+      ctx.fillRect(door.x - 22, door.y - 34, 44, 68);
+      ctx.fillStyle = 'rgba(127,183,173,.42)';
+      ctx.fillRect(door.x - 18, door.y - 30, 36, 60);
+
+      ctx.fillStyle = '#d8d0bd';
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+
+      const lightRadius = player.light ? 420 + Math.sin(flicker * 9) * 22 : 210;
+      const darkness = ctx.createRadialGradient(width / 2, height / 2, 40, width / 2, height / 2, lightRadius);
+      darkness.addColorStop(0, 'rgba(0,0,0,0)');
+      darkness.addColorStop(player.light ? .58 : .28, 'rgba(0,0,0,.16)');
+      darkness.addColorStop(1, 'rgba(0,0,0,.72)');
+      ctx.fillStyle = darkness;
+      ctx.fillRect(0, 0, width, height);
+
+      if (player.light) {
+        const cone = ctx.createRadialGradient(width / 2, height / 2, 40, width / 2, height / 2, 420);
+        cone.addColorStop(0, 'rgba(215,230,207,.16)');
+        cone.addColorStop(1, 'rgba(215,230,207,0)');
+        ctx.fillStyle = cone;
+        ctx.beginPath();
+        ctx.moveTo(width / 2, height / 2);
+        ctx.arc(width / 2, height / 2, 430, player.angle - .38, player.angle + .38);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      if (marker.got) {
+        ctx.fillStyle = `rgba(127,183,173,${0.04 + Math.sin(flicker * 2) * 0.02})`;
+        ctx.fillRect(0, 0, width, height);
+      }
+    }
+
+    let last = performance.now();
+    function loop(now) {
+      const dt = Math.min(.033, (now - last) / 1000);
+      last = now;
+      update(dt);
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    document.getElementById('start').addEventListener('click', () => {
+      overlay.classList.add('hidden');
+      running = true;
+      reset();
+    });
+    addEventListener('keydown', event => {
+      const keyName = event.key.toLowerCase();
+      keys.add(keyName);
+      if (keyName === 'f') {
+        player.light = player.battery > 0 ? !player.light : false;
+        setMessage(player.light ? '형광등이 다시 웅웅거린다.' : '형광등이 한 박자 늦게 꺼졌다.', 1.2);
+      }
+      if (keyName === 'e') interact();
+    });
+    addEventListener('keyup', event => keys.delete(event.key.toLowerCase()));
+    addEventListener('mousemove', event => {
+      mouse.x = event.clientX;
+      mouse.y = event.clientY;
+    });
+    canvas.addEventListener('click', interact);
+    addEventListener('resize', resize);
+    buildWalls();
+    resize();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

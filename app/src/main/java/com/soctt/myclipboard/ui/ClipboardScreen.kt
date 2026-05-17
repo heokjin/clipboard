@@ -15,11 +15,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -27,6 +34,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.soctt.myclipboard.R
+import com.soctt.myclipboard.data.ClipboardThemeMode
+import com.soctt.myclipboard.data.MaxPreviewLineCount
+import com.soctt.myclipboard.data.MinPreviewLineCount
 import com.soctt.myclipboard.data.local.ClipboardPhraseEntity
 
 @Composable
@@ -40,6 +50,16 @@ fun ClipboardScreen(
     onCopyPhrase: (ClipboardPhraseEntity) -> Unit,
     onEditPhrase: (ClipboardPhraseEntity) -> Unit,
     onDeletePhrase: (ClipboardPhraseEntity) -> Unit,
+    onShowSettings: () -> Unit,
+    onDismissSettings: () -> Unit,
+    onPreventDuplicatesChange: (Boolean) -> Unit,
+    onThemeModeChange: (ClipboardThemeMode) -> Unit,
+    onShowCopySuccessMessageChange: (Boolean) -> Unit,
+    onCopySuccessMessageTemplateChange: (String) -> Unit,
+    onPinFavoritesToTopChange: (Boolean) -> Unit,
+    onPreviewLineCountChange: (Int) -> Unit,
+    onSetPhraseFavorite: (ClipboardPhraseEntity, Boolean) -> Unit,
+    onDeleteAllPhrases: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -47,18 +67,27 @@ fun ClipboardScreen(
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
-        OutlinedTextField(
-            value = uiState.searchQuery,
-            onValueChange = onSearchQueryChange,
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            label = {
-                Text(stringResource(R.string.search_label))
-            },
-            placeholder = {
-                Text(stringResource(R.string.search_placeholder))
-            },
-            singleLine = true,
-        )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedTextField(
+                value = uiState.searchQuery,
+                onValueChange = onSearchQueryChange,
+                modifier = Modifier.weight(1f),
+                label = {
+                    Text(stringResource(R.string.search_label))
+                },
+                placeholder = {
+                    Text(stringResource(R.string.search_placeholder))
+                },
+                singleLine = true,
+            )
+            TextButton(onClick = onShowSettings) {
+                Text(stringResource(R.string.settings_action))
+            }
+        }
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -78,9 +107,11 @@ fun ClipboardScreen(
                 ) { phrase ->
                     PhraseCard(
                         phrase = phrase,
+                        previewLineCount = uiState.previewLineCount,
                         onCopyPhrase = onCopyPhrase,
                         onEditPhrase = onEditPhrase,
                         onDeletePhrase = onDeletePhrase,
+                        onSetFavorite = onSetPhraseFavorite,
                     )
                 }
             }
@@ -94,6 +125,20 @@ fun ClipboardScreen(
             onContentChange = onContentChange,
             onDismiss = onDismissEditor,
             onConfirm = onSavePhrase,
+        )
+    }
+
+    if (uiState.isSettingsVisible) {
+        ClipboardSettingsDialog(
+            uiState = uiState,
+            onDismiss = onDismissSettings,
+            onPreventDuplicatesChange = onPreventDuplicatesChange,
+            onThemeModeChange = onThemeModeChange,
+            onShowCopySuccessMessageChange = onShowCopySuccessMessageChange,
+            onCopySuccessMessageTemplateChange = onCopySuccessMessageTemplateChange,
+            onPinFavoritesToTopChange = onPinFavoritesToTopChange,
+            onPreviewLineCountChange = onPreviewLineCountChange,
+            onDeleteAllPhrases = onDeleteAllPhrases,
         )
     }
 }
@@ -131,9 +176,11 @@ private fun EmptyState(
 @Composable
 private fun PhraseCard(
     phrase: ClipboardPhraseEntity,
+    previewLineCount: Int,
     onCopyPhrase: (ClipboardPhraseEntity) -> Unit,
     onEditPhrase: (ClipboardPhraseEntity) -> Unit,
     onDeletePhrase: (ClipboardPhraseEntity) -> Unit,
+    onSetFavorite: (ClipboardPhraseEntity, Boolean) -> Unit,
 ) {
     Card(
         modifier = Modifier
@@ -159,6 +206,14 @@ private fun PhraseCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 InlineActionButton(
+                    text = if (phrase.isFavorite) {
+                        stringResource(R.string.unfavorite_action)
+                    } else {
+                        stringResource(R.string.favorite_action)
+                    },
+                    onClick = { onSetFavorite(phrase, !phrase.isFavorite) },
+                )
+                InlineActionButton(
                     text = stringResource(R.string.edit_action),
                     onClick = { onEditPhrase(phrase) },
                 )
@@ -171,7 +226,7 @@ private fun PhraseCard(
                 text = phrase.content,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
+                maxLines = previewLineCount,
                 overflow = TextOverflow.Ellipsis,
             )
         }
@@ -256,3 +311,232 @@ private fun PhraseEditorDialog(
         },
     )
 }
+
+@Composable
+private fun ClipboardSettingsDialog(
+    uiState: ClipboardUiState,
+    onDismiss: () -> Unit,
+    onPreventDuplicatesChange: (Boolean) -> Unit,
+    onThemeModeChange: (ClipboardThemeMode) -> Unit,
+    onShowCopySuccessMessageChange: (Boolean) -> Unit,
+    onCopySuccessMessageTemplateChange: (String) -> Unit,
+    onPinFavoritesToTopChange: (Boolean) -> Unit,
+    onPreviewLineCountChange: (Int) -> Unit,
+    onDeleteAllPhrases: () -> Unit,
+) {
+    var isDeleteConfirmationVisible by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(stringResource(R.string.settings_title))
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                SettingsSwitchRow(
+                    title = stringResource(R.string.copy_success_setting_title),
+                    description = stringResource(R.string.copy_success_setting_description),
+                    checked = uiState.showCopySuccessMessage,
+                    onCheckedChange = onShowCopySuccessMessageChange,
+                )
+                OutlinedTextField(
+                    value = uiState.copySuccessMessageTemplate,
+                    onValueChange = onCopySuccessMessageTemplateChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = uiState.showCopySuccessMessage,
+                    label = {
+                        Text(stringResource(R.string.copy_success_message_template_label))
+                    },
+                    placeholder = {
+                        Text(stringResource(R.string.copy_success_message_template_placeholder))
+                    },
+                    supportingText = {
+                        Text(stringResource(R.string.copy_success_message_template_hint))
+                    },
+                    singleLine = true,
+                )
+                SettingsSwitchRow(
+                    title = stringResource(R.string.prevent_duplicates_setting_title),
+                    description = stringResource(R.string.prevent_duplicates_setting_description),
+                    checked = uiState.preventDuplicates,
+                    onCheckedChange = onPreventDuplicatesChange,
+                )
+                SettingsSwitchRow(
+                    title = stringResource(R.string.pin_favorites_setting_title),
+                    description = stringResource(R.string.pin_favorites_setting_description),
+                    checked = uiState.pinFavoritesToTop,
+                    onCheckedChange = onPinFavoritesToTopChange,
+                )
+                SettingsStepperRow(
+                    title = stringResource(R.string.preview_lines_setting_title),
+                    description = stringResource(R.string.preview_lines_setting_description),
+                    value = uiState.previewLineCount,
+                    onValueChange = onPreviewLineCountChange,
+                )
+                HorizontalDivider()
+                Text(
+                    text = stringResource(R.string.theme_setting_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                ClipboardThemeMode.entries.forEach { themeMode ->
+                    SettingsRadioRow(
+                        title = stringResource(themeMode.labelRes),
+                        selected = uiState.themeMode == themeMode,
+                        onClick = { onThemeModeChange(themeMode) },
+                    )
+                }
+                HorizontalDivider()
+                TextButton(onClick = { isDeleteConfirmationVisible = true }) {
+                    Text(stringResource(R.string.delete_all_phrases_action))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.close_action))
+            }
+        },
+    )
+
+    if (isDeleteConfirmationVisible) {
+        AlertDialog(
+            onDismissRequest = { isDeleteConfirmationVisible = false },
+            title = {
+                Text(stringResource(R.string.delete_all_confirm_title))
+            },
+            text = {
+                Text(stringResource(R.string.delete_all_confirm_body))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteAllPhrases()
+                        isDeleteConfirmationVisible = false
+                        onDismiss()
+                    },
+                ) {
+                    Text(stringResource(R.string.delete_action))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { isDeleteConfirmationVisible = false }) {
+                    Text(stringResource(R.string.cancel_action))
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun SettingsSwitchRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+        )
+    }
+}
+
+@Composable
+private fun SettingsStepperRow(
+    title: String,
+    description: String,
+    value: Int,
+    onValueChange: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            TextButton(
+                onClick = { onValueChange(value - 1) },
+                enabled = value > MinPreviewLineCount,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+            ) {
+                Text("-")
+            }
+            Text(
+                text = value.toString(),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            TextButton(
+                onClick = { onValueChange(value + 1) },
+                enabled = value < MaxPreviewLineCount,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+            ) {
+                Text("+")
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsRadioRow(
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        RadioButton(
+            selected = selected,
+            onClick = onClick,
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+private val ClipboardThemeMode.labelRes: Int
+    get() = when (this) {
+        ClipboardThemeMode.System -> R.string.theme_system_option
+        ClipboardThemeMode.Light -> R.string.theme_light_option
+        ClipboardThemeMode.Dark -> R.string.theme_dark_option
+    }

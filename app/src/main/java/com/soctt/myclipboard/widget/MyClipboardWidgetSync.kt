@@ -2,6 +2,7 @@ package com.soctt.myclipboard.widget
 
 import android.content.Context
 import android.util.Log
+import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.updateAll
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.sync.Mutex
@@ -34,17 +35,29 @@ object MyClipboardWidgetSync {
                 Log.d(WidgetDebugTag, "MyClipboardWidgetSync.refreshIfDirty skipped after lock dirty=false")
                 return
             }
-            Log.d(WidgetDebugTag, "MyClipboardWidgetSync.refreshIfDirty -> updateAll start")
-            MyClipboardAppWidget().updateAll(context.applicationContext)
-            Log.d(WidgetDebugTag, "MyClipboardWidgetSync.refreshIfDirty -> updateAll requested")
+            refreshWidgets(context.applicationContext, "refreshIfDirty")
         }
     }
 
     suspend fun refreshAll(context: Context) {
         refreshMutex.withLock {
-            Log.d(WidgetDebugTag, "MyClipboardWidgetSync.refreshAll -> updateAll start")
-            MyClipboardAppWidget().updateAll(context.applicationContext)
-            Log.d(WidgetDebugTag, "MyClipboardWidgetSync.refreshAll -> updateAll requested")
+            refreshWidgets(context.applicationContext, "refreshAll")
         }
+    }
+
+    private suspend fun refreshWidgets(
+        context: Context,
+        source: String,
+    ) {
+        val widget = MyClipboardAppWidget()
+        val glanceIds = GlanceAppWidgetManager(context)
+            .getGlanceIds(MyClipboardAppWidget::class.java)
+        Log.d(WidgetDebugTag, "MyClipboardWidgetSync.$source -> direct update start ids=${glanceIds.size}")
+        glanceIds.forEach { glanceId ->
+            Log.d(WidgetDebugTag, "MyClipboardWidgetSync.$source -> update glanceId=$glanceId")
+            widget.update(context, glanceId)
+        }
+        widget.updateAll(context)
+        Log.d(WidgetDebugTag, "MyClipboardWidgetSync.$source -> updates requested ids=${glanceIds.size}")
     }
 }

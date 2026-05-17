@@ -13,10 +13,17 @@ interface ReminderDao {
     @Query(
         """
         SELECT * FROM reminders
-        ORDER BY updatedAt DESC
+        WHERE :query = ''
+            OR text LIKE '%' || :query || '%'
+        ORDER BY
+            CASE WHEN :pinImportantToTop THEN isImportant ELSE 0 END DESC,
+            updatedAt DESC
         """
     )
-    fun observeReminders(): Flow<List<ReminderEntity>>
+    fun observeReminders(
+        query: String,
+        pinImportantToTop: Boolean,
+    ): Flow<List<ReminderEntity>>
 
     @Query(
         """
@@ -53,4 +60,7 @@ interface ReminderDao {
 
     @Delete
     suspend fun delete(reminder: ReminderEntity)
+
+    @Query("DELETE FROM reminders")
+    suspend fun deleteAll()
 }

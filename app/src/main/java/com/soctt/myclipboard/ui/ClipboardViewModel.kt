@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.soctt.myclipboard.data.ClipboardRepository
+import com.soctt.myclipboard.data.ClipboardSettingsRepository
+import com.soctt.myclipboard.data.ClipboardThemeMode
 import com.soctt.myclipboard.data.local.ClipboardPhraseEntity
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -23,25 +25,44 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalCoroutinesApi::class)
 class ClipboardViewModel(
     private val repository: ClipboardRepository,
+    private val settingsRepository: ClipboardSettingsRepository,
 ) : ViewModel() {
 
     private val searchQuery = MutableStateFlow("")
     private val editorState = MutableStateFlow(EditorState())
+    private val isSettingsVisible = MutableStateFlow(false)
     private var saveJob: Job? = null
     private val _copySuccessMessages = MutableSharedFlow<String>(extraBufferCapacity = 1)
 
-    private val phrases = searchQuery.flatMapLatest { query ->
-        repository.observePhrases(query)
+    private val phrases = combine(
+        searchQuery,
+        settingsRepository.settings,
+    ) { query, settings ->
+        query to settings.pinFavoritesToTop
+    }.flatMapLatest { (query, pinFavoritesToTop) ->
+        repository.observePhrases(
+            query = query,
+            pinFavoritesToTop = pinFavoritesToTop,
+        )
     }
 
     val uiState: StateFlow<ClipboardUiState> = combine(
         searchQuery,
         phrases,
         editorState,
-    ) { query, phrases, editor ->
+        settingsRepository.settings,
+        isSettingsVisible,
+    ) { query, phrases, editor, settings, isSettingsVisible ->
         ClipboardUiState(
             searchQuery = query,
             phrases = phrases,
+            preventDuplicates = settings.preventDuplicates,
+            themeMode = settings.themeMode,
+            showCopySuccessMessage = settings.showCopySuccessMessage,
+            copySuccessMessageTemplate = settings.copySuccessMessageTemplate,
+            pinFavoritesToTop = settings.pinFavoritesToTop,
+            previewLineCount = settings.previewLineCount,
+            isSettingsVisible = isSettingsVisible,
             isEditorVisible = editor.isVisible,
             editingPhraseId = editor.editingPhraseId,
             titleInput = editor.titleInput,
@@ -70,6 +91,45 @@ class ClipboardViewModel(
 
     fun dismissEditor() {
         editorState.value = EditorState()
+    }
+
+    fun showSettings() {
+        isSettingsVisible.value = true
+    }
+
+    fun dismissSettings() {
+        isSettingsVisible.value = false
+    }
+
+    fun setPreventDuplicates(enabled: Boolean) {
+        settingsRepository.setPreventDuplicates(enabled)
+    }
+
+    fun setThemeMode(themeMode: ClipboardThemeMode) {
+        settingsRepository.setThemeMode(themeMode)
+    }
+
+    fun setShowCopySuccessMessage(enabled: Boolean) {
+        settingsRepository.setShowCopySuccessMessage(enabled)
+    }
+
+    fun setCopySuccessMessageTemplate(template: String) {
+        settingsRepository.setCopySuccessMessageTemplate(template)
+    }
+
+    fun setPinFavoritesToTop(enabled: Boolean) {
+        settingsRepository.setPinFavoritesToTop(enabled)
+    }
+
+    fun setPreviewLineCount(lineCount: Int) {
+        settingsRepository.setPreviewLineCount(lineCount)
+    }
+
+    fun deleteAllPhrases() {
+        viewModelScope.launch {
+            repository.deleteAllPhrases()
+            dismissEditor()
+        }
     }
 
     fun onTitleChange(title: String) {
@@ -127,6 +187,15 @@ class ClipboardViewModel(
         }
     }
 
+    fun setPhraseFavorite(phrase: ClipboardPhraseEntity, isFavorite: Boolean) {
+        viewModelScope.launch {
+            repository.setPhraseFavorite(
+                id = phrase.id,
+                isFavorite = isFavorite,
+            )
+        }
+    }
+
     fun notifyCopySuccess(phrase: ClipboardPhraseEntity) {
         val label = phrase.title.ifBlank {
             phrase.content.lineSequence().firstOrNull().orEmpty().take(24)
@@ -135,10 +204,16 @@ class ClipboardViewModel(
     }
 
     companion object {
-        fun factory(repository: ClipboardRepository): ViewModelProvider.Factory {
+        fun factory(
+            repository: ClipboardRepository,
+            settingsRepository: ClipboardSettingsRepository,
+        ): ViewModelProvider.Factory {
             return viewModelFactory {
                 initializer {
-                    ClipboardViewModel(repository)
+                    ClipboardViewModel(
+                        repository = repository,
+                        settingsRepository = settingsRepository,
+                    )
                 }
             }
         }
@@ -176,7 +251,11 @@ class ClipboardViewModel(
 
         val editingPhraseId = editor.editingPhraseId
         if (editingPhraseId == null) {
-            repository.addPhrase(title = title, content = content)
+            repository.addPhrase(
+                title = title,
+                content = content,
+                preventDuplicates = settingsRepository.settings.value.preventDuplicates,
+            )
         } else {
             repository.updatePhrase(
                 id = editingPhraseId,
