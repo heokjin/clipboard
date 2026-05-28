@@ -206,7 +206,20 @@ private fun WidgetContent(
                 )
             }
 
-            Spacer(modifier = GlanceModifier.defaultWeight())
+            Text(
+                text = "",
+                modifier = GlanceModifier
+                    .defaultWeight()
+                    .clickable(
+                        actionStartActivity<MainActivity>(
+                            actionParametersOf(
+                                WidgetActionKeys.startPage to currentPage.value,
+                            )
+                        )
+                    )
+                    .padding(vertical = 12.dp),
+                maxLines = 1,
+            )
 
             Text(
                 text = "+",
