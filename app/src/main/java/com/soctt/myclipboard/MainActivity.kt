@@ -54,10 +54,13 @@ class MainActivity : ComponentActivity() {
         }
         val initialReminderId = intent?.getLongExtra(MyClipboardWidgetNavigation.EXTRA_REMINDER_ID, -1L)
             ?.takeIf { it >= 0L }
+        val shouldStartAdd = intent?.getStringExtra(MyClipboardWidgetNavigation.EXTRA_START_ACTION) ==
+            MyClipboardWidgetNavigation.START_ACTION_ADD
         setContent {
             MyClipboardApp(
                 initialPage = initialPage,
                 initialReminderId = initialReminderId,
+                shouldStartAdd = shouldStartAdd,
             )
         }
     }
@@ -67,6 +70,7 @@ class MainActivity : ComponentActivity() {
 private fun MyClipboardApp(
     initialPage: Int,
     initialReminderId: Long?,
+    shouldStartAdd: Boolean,
 ) {
     val context = LocalContext.current
     val appContext = context.applicationContext
@@ -126,6 +130,15 @@ private fun MyClipboardApp(
         LaunchedEffect(initialReminderId, reminderViewModel) {
             initialReminderId?.let { reminderId ->
                 reminderViewModel.startEditById(reminderId)
+            }
+        }
+
+        LaunchedEffect(shouldStartAdd, initialPage, clipboardViewModel, reminderViewModel) {
+            if (shouldStartAdd) {
+                when (initialPage) {
+                    1 -> clipboardViewModel.showAddDialog()
+                    else -> reminderViewModel.showAddDialog()
+                }
             }
         }
 

@@ -84,7 +84,7 @@
     <string name="widget_description">Shows reminders or clipboard phrases and expands vertically to reveal more items.</string>
     <string name="widget_tab_reminder">Reminders</string>
     <string name="widget_tab_clipboard">Clipboard</string>
-    <string name="widget_refresh_action">Refresh widget</string>
+    <string name="widget_add_action">Add item from widget</string>
     <string name="widget_empty_reminders">No reminders yet. Tap to open the app.</string>
     <string name="widget_empty_clipboard">No clipboard phrases yet. Tap to open the app.</string>
 </resources>

@@ -84,7 +84,7 @@
     <string name="widget_description">리마인더와 클립보드 문구를 보여주고 아래로 늘리면 더 많은 항목을 표시합니다.</string>
     <string name="widget_tab_reminder">리마인더</string>
     <string name="widget_tab_clipboard">클립보드</string>
-    <string name="widget_refresh_action">위젯 새로고침</string>
+    <string name="widget_add_action">위젯에서 항목 추가</string>
     <string name="widget_empty_reminders">리마인더가 없습니다. 탭해서 앱을 여세요.</string>
     <string name="widget_empty_clipboard">문구가 없습니다. 탭해서 앱을 여세요.</string>
 </resources>

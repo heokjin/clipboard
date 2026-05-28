@@ -40,7 +40,7 @@
     <string name="widget_description">リマインダーまたはクリップボードの定型文を表示し、縦に広げるとさらに多くの項目を表示します。</string>
     <string name="widget_tab_reminder">リマインダー</string>
     <string name="widget_tab_clipboard">クリップボード</string>
-    <string name="widget_refresh_action">ウィジェットを更新</string>
+    <string name="widget_add_action">ウィジェットから項目を追加</string>
     <string name="widget_empty_reminders">リマインダーはまだありません。タップしてアプリを開いてください。</string>
     <string name="widget_empty_clipboard">クリップボードの定型文はまだありません。タップしてアプリを開いてください。</string>
 </resources>

@@ -15,7 +15,6 @@ import androidx.compose.ui.unit.sp
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.glance.GlanceModifier
-import androidx.glance.Image
 import androidx.glance.LocalSize
 import androidx.glance.action.Action
 import androidx.glance.action.ActionParameters
@@ -138,6 +137,7 @@ private object WidgetActionKeys {
     val page = ActionParameters.Key<String>("widget_page")
     val phraseId = ActionParameters.Key<Long>("widget_phrase_id")
     val startPage = ActionParameters.Key<String>(MyClipboardWidgetNavigation.EXTRA_START_PAGE)
+    val startAction = ActionParameters.Key<String>(MyClipboardWidgetNavigation.EXTRA_START_ACTION)
     val reminderId = ActionParameters.Key<Long>(MyClipboardWidgetNavigation.EXTRA_REMINDER_ID)
 }
 
@@ -171,10 +171,6 @@ private fun WidgetContent(
         WidgetDebugTag,
         "WidgetContent size width=${size.width.value} height=${size.height.value} page=${currentPage.value} reminders=${reminders.size} phrases=${phrases.size} reminderRows=$reminderRows clipboardRows=$clipboardRows"
     )
-    val openCurrentPageAction = actionStartActivity<MainActivity>(
-        actionParametersOf(WidgetActionKeys.startPage to currentPage.value)
-    )
-
     Column(
         modifier = GlanceModifier
             .fillMaxSize()
@@ -182,9 +178,7 @@ private fun WidgetContent(
             .padding(12.dp),
     ) {
         Row(
-            modifier = GlanceModifier
-                .fillMaxWidth()
-                .clickable(openCurrentPageAction)
+            modifier = GlanceModifier.fillMaxWidth()
         ) {
             Row {
                 WidgetTabChip(
@@ -214,12 +208,24 @@ private fun WidgetContent(
 
             Spacer(modifier = GlanceModifier.defaultWeight())
 
-            Image(
-                provider = androidx.glance.ImageProvider(R.drawable.ic_widget_refresh),
-                contentDescription = androidx.glance.LocalContext.current.getString(R.string.widget_refresh_action),
+            Text(
+                text = "+",
                 modifier = GlanceModifier
-                    .clickable(actionRunCallback<RefreshWidgetAction>())
-                    .padding(4.dp),
+                    .background(WidgetColors.selectedTab)
+                    .clickable(
+                        actionStartActivity<MainActivity>(
+                            actionParametersOf(
+                                WidgetActionKeys.startPage to currentPage.value,
+                                WidgetActionKeys.startAction to MyClipboardWidgetNavigation.START_ACTION_ADD,
+                            )
+                        )
+                    )
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                style = TextStyle(
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                maxLines = 1,
             )
         }
 
@@ -563,16 +569,5 @@ class CopyPhraseToClipboardAction : ActionCallback {
         }
 
         MyClipboardAppWidget().update(context, glanceId)
-    }
-}
-
-class RefreshWidgetAction : ActionCallback {
-    override suspend fun onAction(
-        context: Context,
-        glanceId: androidx.glance.GlanceId,
-        parameters: ActionParameters,
-    ) {
-        Log.d(WidgetDebugTag, "RefreshWidgetAction tapped")
-        MyClipboardWidgetSync.refreshAll(context)
     }
 }
