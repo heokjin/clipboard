@@ -242,7 +242,7 @@ private fun WidgetContent(
             )
         }
 
-        Spacer(modifier = GlanceModifier.height(10.dp))
+        Spacer(modifier = GlanceModifier.height(3.dp))
 
         Column(
             modifier = GlanceModifier
