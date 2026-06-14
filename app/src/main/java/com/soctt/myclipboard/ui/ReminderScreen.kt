@@ -50,7 +50,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.soctt.myclipboard.R
 import com.soctt.myclipboard.data.MaxReminderPreviewLineCount
+import com.soctt.myclipboard.data.MaxReminderWidgetFontSize
 import com.soctt.myclipboard.data.MinReminderPreviewLineCount
+import com.soctt.myclipboard.data.MinReminderWidgetFontSize
 import com.soctt.myclipboard.data.local.ReminderEntity
 import com.soctt.myclipboard.reminder.buildReminderAnnotatedString
 import com.soctt.myclipboard.reminder.styleSpans
@@ -71,6 +73,7 @@ fun ReminderScreen(
     onShowWritingHintChange: (Boolean) -> Unit,
     onPinImportantToTopChange: (Boolean) -> Unit,
     onPreviewLineCountChange: (Int) -> Unit,
+    onWidgetFontSizeChange: (Int) -> Unit,
     onReminderInputChange: (TextFieldValue) -> Unit,
     onToggleHighlightSelection: () -> Unit,
     onDismissEditor: () -> Unit,
@@ -79,6 +82,8 @@ fun ReminderScreen(
     onDeleteReminder: (ReminderEntity) -> Unit,
     onSetReminderImportant: (ReminderEntity, Boolean) -> Unit,
     onDeleteAllReminders: () -> Unit,
+    onSaveReminderBackup: () -> Unit,
+    onRestoreReminderBackup: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (uiState.isEditorVisible) {
@@ -110,7 +115,10 @@ fun ReminderScreen(
             onShowWritingHintChange = onShowWritingHintChange,
             onPinImportantToTopChange = onPinImportantToTopChange,
             onPreviewLineCountChange = onPreviewLineCountChange,
+            onWidgetFontSizeChange = onWidgetFontSizeChange,
             onDeleteAllReminders = onDeleteAllReminders,
+            onSaveReminderBackup = onSaveReminderBackup,
+            onRestoreReminderBackup = onRestoreReminderBackup,
         )
     }
 }
@@ -350,9 +358,13 @@ private fun ReminderSettingsDialog(
     onShowWritingHintChange: (Boolean) -> Unit,
     onPinImportantToTopChange: (Boolean) -> Unit,
     onPreviewLineCountChange: (Int) -> Unit,
+    onWidgetFontSizeChange: (Int) -> Unit,
     onDeleteAllReminders: () -> Unit,
+    onSaveReminderBackup: () -> Unit,
+    onRestoreReminderBackup: () -> Unit,
 ) {
     var isDeleteConfirmationVisible by remember { mutableStateOf(false) }
+    var isRestoreConfirmationVisible by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -377,8 +389,36 @@ private fun ReminderSettingsDialog(
                     title = stringResource(R.string.reminder_preview_lines_setting_title),
                     description = stringResource(R.string.reminder_preview_lines_setting_description),
                     value = uiState.previewLineCount,
+                    minValue = MinReminderPreviewLineCount,
+                    maxValue = MaxReminderPreviewLineCount,
                     onValueChange = onPreviewLineCountChange,
                 )
+                ReminderSettingsStepperRow(
+                    title = stringResource(R.string.widget_font_size_setting_title),
+                    description = stringResource(R.string.widget_font_size_setting_description),
+                    value = uiState.widgetFontSize,
+                    minValue = MinReminderWidgetFontSize,
+                    maxValue = MaxReminderWidgetFontSize,
+                    onValueChange = onWidgetFontSizeChange,
+                )
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    TextButton(
+                        onClick = onSaveReminderBackup,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(R.string.reminder_backup_save_action))
+                    }
+                    if (uiState.hasBackup) {
+                        TextButton(onClick = { isRestoreConfirmationVisible = true }) {
+                            Text(stringResource(R.string.reminder_backup_available_action))
+                        }
+                    }
+                }
                 HorizontalDivider()
                 TextButton(onClick = { isDeleteConfirmationVisible = true }) {
                     Text(stringResource(R.string.delete_all_reminders_action))
@@ -391,6 +431,34 @@ private fun ReminderSettingsDialog(
             }
         },
     )
+
+    if (isRestoreConfirmationVisible) {
+        AlertDialog(
+            onDismissRequest = { isRestoreConfirmationVisible = false },
+            title = {
+                Text(stringResource(R.string.reminder_backup_restore_confirm_title))
+            },
+            text = {
+                Text(stringResource(R.string.reminder_backup_restore_confirm_body))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onRestoreReminderBackup()
+                        isRestoreConfirmationVisible = false
+                        onDismiss()
+                    },
+                ) {
+                    Text(stringResource(R.string.reminder_backup_restore_action))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { isRestoreConfirmationVisible = false }) {
+                    Text(stringResource(R.string.cancel_action))
+                }
+            },
+        )
+    }
 
     if (isDeleteConfirmationVisible) {
         AlertDialog(
@@ -457,6 +525,8 @@ private fun ReminderSettingsStepperRow(
     title: String,
     description: String,
     value: Int,
+    minValue: Int,
+    maxValue: Int,
     onValueChange: (Int) -> Unit,
 ) {
     Row(
@@ -482,7 +552,7 @@ private fun ReminderSettingsStepperRow(
         ) {
             TextButton(
                 onClick = { onValueChange(value - 1) },
-                enabled = value > MinReminderPreviewLineCount,
+                enabled = value > minValue,
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
             ) {
                 Text("-")
@@ -494,7 +564,7 @@ private fun ReminderSettingsStepperRow(
             )
             TextButton(
                 onClick = { onValueChange(value + 1) },
-                enabled = value < MaxReminderPreviewLineCount,
+                enabled = value < maxValue,
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
             ) {
                 Text("+")

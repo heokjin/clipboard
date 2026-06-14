@@ -59,6 +59,7 @@ fun HomeScreen(
     onClipboardCopySuccessMessageTemplateChange: (String) -> Unit,
     onClipboardPinFavoritesToTopChange: (Boolean) -> Unit,
     onClipboardPreviewLineCountChange: (Int) -> Unit,
+    onClipboardWidgetFontSizeChange: (Int) -> Unit,
     onSetPhraseFavorite: (ClipboardPhraseEntity, Boolean) -> Unit,
     onDeleteAllPhrases: () -> Unit,
     reminderUiState: ReminderUiState,
@@ -68,6 +69,7 @@ fun HomeScreen(
     onReminderShowWritingHintChange: (Boolean) -> Unit,
     onReminderPinImportantToTopChange: (Boolean) -> Unit,
     onReminderPreviewLineCountChange: (Int) -> Unit,
+    onReminderWidgetFontSizeChange: (Int) -> Unit,
     onShowAddReminderDialog: () -> Unit,
     onReminderInputChange: (TextFieldValue) -> Unit,
     onToggleReminderHighlightSelection: () -> Unit,
@@ -78,6 +80,8 @@ fun HomeScreen(
     onDeleteReminder: (ReminderEntity) -> Unit,
     onSetReminderImportant: (ReminderEntity, Boolean) -> Unit,
     onDeleteAllReminders: () -> Unit,
+    onSaveReminderBackup: () -> Unit,
+    onRestoreReminderBackup: () -> Unit,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
 ) {
@@ -190,6 +194,7 @@ fun HomeScreen(
                             onCopySuccessMessageTemplateChange = onClipboardCopySuccessMessageTemplateChange,
                             onPinFavoritesToTopChange = onClipboardPinFavoritesToTopChange,
                             onPreviewLineCountChange = onClipboardPreviewLineCountChange,
+                            onWidgetFontSizeChange = onClipboardWidgetFontSizeChange,
                             onSetPhraseFavorite = onSetPhraseFavorite,
                             onDeleteAllPhrases = onDeleteAllPhrases,
                         )
@@ -204,6 +209,7 @@ fun HomeScreen(
                             onShowWritingHintChange = onReminderShowWritingHintChange,
                             onPinImportantToTopChange = onReminderPinImportantToTopChange,
                             onPreviewLineCountChange = onReminderPreviewLineCountChange,
+                            onWidgetFontSizeChange = onReminderWidgetFontSizeChange,
                             onReminderInputChange = onReminderInputChange,
                             onToggleHighlightSelection = onToggleReminderHighlightSelection,
                             onDismissEditor = onDismissReminderEditor,
@@ -212,6 +218,8 @@ fun HomeScreen(
                             onDeleteReminder = onDeleteReminder,
                             onSetReminderImportant = onSetReminderImportant,
                             onDeleteAllReminders = onDeleteAllReminders,
+                            onSaveReminderBackup = onSaveReminderBackup,
+                            onRestoreReminderBackup = onRestoreReminderBackup,
                         )
                     }
 

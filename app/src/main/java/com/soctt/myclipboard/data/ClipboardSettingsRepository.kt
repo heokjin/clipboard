@@ -2,6 +2,7 @@ package com.soctt.myclipboard.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.soctt.myclipboard.widget.MyClipboardWidgetSync
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,9 +14,12 @@ private const val ShowCopySuccessMessageKey = "show_copy_success_message"
 private const val CopySuccessMessageTemplateKey = "copy_success_message_template"
 private const val PinFavoritesToTopKey = "pin_favorites_to_top"
 private const val PreviewLineCountKey = "preview_line_count"
+private const val WidgetFontSizeKey = "widget_font_size"
 
 const val MinPreviewLineCount = 1
 const val MaxPreviewLineCount = 5
+const val MinWidgetFontSize = 10
+const val MaxWidgetFontSize = 18
 
 enum class ClipboardThemeMode {
     System,
@@ -30,6 +34,7 @@ data class ClipboardSettings(
     val copySuccessMessageTemplate: String = "",
     val pinFavoritesToTop: Boolean = true,
     val previewLineCount: Int = 2,
+    val widgetFontSize: Int = 12,
 )
 
 class ClipboardSettingsRepository(context: Context) {
@@ -85,6 +90,13 @@ class ClipboardSettingsRepository(context: Context) {
             .apply()
     }
 
+    fun setWidgetFontSize(fontSize: Int) {
+        prefs.edit()
+            .putInt(WidgetFontSizeKey, fontSize.coerceIn(MinWidgetFontSize, MaxWidgetFontSize))
+            .apply()
+        MyClipboardWidgetSync.markDirty()
+    }
+
     private fun SharedPreferences.readSettings(): ClipboardSettings {
         return ClipboardSettings(
             preventDuplicates = getBoolean(PreventDuplicatesKey, true),
@@ -98,6 +110,8 @@ class ClipboardSettingsRepository(context: Context) {
             pinFavoritesToTop = getBoolean(PinFavoritesToTopKey, true),
             previewLineCount = getInt(PreviewLineCountKey, 2)
                 .coerceIn(MinPreviewLineCount, MaxPreviewLineCount),
+            widgetFontSize = getInt(WidgetFontSizeKey, 12)
+                .coerceIn(MinWidgetFontSize, MaxWidgetFontSize),
         )
     }
 }

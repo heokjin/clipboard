@@ -62,6 +62,7 @@ class ClipboardViewModel(
             copySuccessMessageTemplate = settings.copySuccessMessageTemplate,
             pinFavoritesToTop = settings.pinFavoritesToTop,
             previewLineCount = settings.previewLineCount,
+            widgetFontSize = settings.widgetFontSize,
             isSettingsVisible = isSettingsVisible,
             isEditorVisible = editor.isVisible,
             editingPhraseId = editor.editingPhraseId,
@@ -123,6 +124,10 @@ class ClipboardViewModel(
 
     fun setPreviewLineCount(lineCount: Int) {
         settingsRepository.setPreviewLineCount(lineCount)
+    }
+
+    fun setWidgetFontSize(fontSize: Int) {
+        settingsRepository.setWidgetFontSize(fontSize)
     }
 
     fun deleteAllPhrases() {

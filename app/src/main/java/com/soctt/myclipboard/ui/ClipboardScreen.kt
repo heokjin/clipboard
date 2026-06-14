@@ -36,7 +36,9 @@ import androidx.compose.ui.unit.dp
 import com.soctt.myclipboard.R
 import com.soctt.myclipboard.data.ClipboardThemeMode
 import com.soctt.myclipboard.data.MaxPreviewLineCount
+import com.soctt.myclipboard.data.MaxWidgetFontSize
 import com.soctt.myclipboard.data.MinPreviewLineCount
+import com.soctt.myclipboard.data.MinWidgetFontSize
 import com.soctt.myclipboard.data.local.ClipboardPhraseEntity
 
 @Composable
@@ -58,6 +60,7 @@ fun ClipboardScreen(
     onCopySuccessMessageTemplateChange: (String) -> Unit,
     onPinFavoritesToTopChange: (Boolean) -> Unit,
     onPreviewLineCountChange: (Int) -> Unit,
+    onWidgetFontSizeChange: (Int) -> Unit,
     onSetPhraseFavorite: (ClipboardPhraseEntity, Boolean) -> Unit,
     onDeleteAllPhrases: () -> Unit,
     modifier: Modifier = Modifier,
@@ -138,6 +141,7 @@ fun ClipboardScreen(
             onCopySuccessMessageTemplateChange = onCopySuccessMessageTemplateChange,
             onPinFavoritesToTopChange = onPinFavoritesToTopChange,
             onPreviewLineCountChange = onPreviewLineCountChange,
+            onWidgetFontSizeChange = onWidgetFontSizeChange,
             onDeleteAllPhrases = onDeleteAllPhrases,
         )
     }
@@ -322,6 +326,7 @@ private fun ClipboardSettingsDialog(
     onCopySuccessMessageTemplateChange: (String) -> Unit,
     onPinFavoritesToTopChange: (Boolean) -> Unit,
     onPreviewLineCountChange: (Int) -> Unit,
+    onWidgetFontSizeChange: (Int) -> Unit,
     onDeleteAllPhrases: () -> Unit,
 ) {
     var isDeleteConfirmationVisible by remember { mutableStateOf(false) }
@@ -371,7 +376,17 @@ private fun ClipboardSettingsDialog(
                     title = stringResource(R.string.preview_lines_setting_title),
                     description = stringResource(R.string.preview_lines_setting_description),
                     value = uiState.previewLineCount,
+                    minValue = MinPreviewLineCount,
+                    maxValue = MaxPreviewLineCount,
                     onValueChange = onPreviewLineCountChange,
+                )
+                SettingsStepperRow(
+                    title = stringResource(R.string.widget_font_size_setting_title),
+                    description = stringResource(R.string.widget_font_size_setting_description),
+                    value = uiState.widgetFontSize,
+                    minValue = MinWidgetFontSize,
+                    maxValue = MaxWidgetFontSize,
+                    onValueChange = onWidgetFontSizeChange,
                 )
                 HorizontalDivider()
                 Text(
@@ -464,6 +479,8 @@ private fun SettingsStepperRow(
     title: String,
     description: String,
     value: Int,
+    minValue: Int,
+    maxValue: Int,
     onValueChange: (Int) -> Unit,
 ) {
     Row(
@@ -489,7 +506,7 @@ private fun SettingsStepperRow(
         ) {
             TextButton(
                 onClick = { onValueChange(value - 1) },
-                enabled = value > MinPreviewLineCount,
+                enabled = value > minValue,
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
             ) {
                 Text("-")
@@ -501,7 +518,7 @@ private fun SettingsStepperRow(
             )
             TextButton(
                 onClick = { onValueChange(value + 1) },
-                enabled = value < MaxPreviewLineCount,
+                enabled = value < maxValue,
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
             ) {
                 Text("+")

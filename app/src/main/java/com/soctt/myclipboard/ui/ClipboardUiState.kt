@@ -12,6 +12,7 @@ data class ClipboardUiState(
     val copySuccessMessageTemplate: String = "",
     val pinFavoritesToTop: Boolean = true,
     val previewLineCount: Int = 2,
+    val widgetFontSize: Int = 12,
     val isSettingsVisible: Boolean = false,
     val isEditorVisible: Boolean = false,
     val editingPhraseId: Long? = null,

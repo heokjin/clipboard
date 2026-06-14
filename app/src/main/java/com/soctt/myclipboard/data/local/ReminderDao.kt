@@ -46,6 +46,14 @@ interface ReminderDao {
     @Query(
         """
         SELECT * FROM reminders
+        ORDER BY updatedAt DESC
+        """
+    )
+    suspend fun getAllReminders(): List<ReminderEntity>
+
+    @Query(
+        """
+        SELECT * FROM reminders
         WHERE id = :id
         LIMIT 1
         """

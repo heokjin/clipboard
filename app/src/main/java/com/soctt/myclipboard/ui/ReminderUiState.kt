@@ -12,6 +12,8 @@ data class ReminderUiState(
     val showWritingHint: Boolean = true,
     val pinImportantToTop: Boolean = true,
     val previewLineCount: Int = 2,
+    val widgetFontSize: Int = 13,
+    val hasBackup: Boolean = false,
     val isSettingsVisible: Boolean = false,
     val isEditorVisible: Boolean = false,
     val editingReminderId: Long? = null,

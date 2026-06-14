@@ -35,6 +35,7 @@ import com.soctt.myclipboard.data.ReminderRepository
 import com.soctt.myclipboard.data.ReminderSettingsRepository
 import com.soctt.myclipboard.ui.HomeScreen
 import com.soctt.myclipboard.ui.ClipboardViewModel
+import com.soctt.myclipboard.ui.ReminderSettingsEvent
 import com.soctt.myclipboard.ui.ReminderViewModel
 import com.soctt.myclipboard.ui.theme.MyclipboardTheme
 import com.soctt.myclipboard.widget.MyClipboardWidgetNavigation
@@ -160,6 +161,25 @@ private fun MyClipboardApp(
             }
         }
 
+        LaunchedEffect(reminderViewModel) {
+            reminderViewModel.settingsEvents.collect { event ->
+                val message = when (event) {
+                    is ReminderSettingsEvent.BackupSaved -> {
+                        context.getString(R.string.reminder_backup_saved_message, event.count)
+                    }
+
+                    is ReminderSettingsEvent.BackupRestored -> {
+                        context.getString(R.string.reminder_backup_restored_message, event.count)
+                    }
+
+                    ReminderSettingsEvent.BackupUnavailable -> {
+                        context.getString(R.string.reminder_backup_unavailable_message)
+                    }
+                }
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            }
+        }
+
         DisposableEffect(
             appContext,
             lifecycleOwner,
@@ -213,6 +233,7 @@ private fun MyClipboardApp(
             onClipboardCopySuccessMessageTemplateChange = clipboardViewModel::setCopySuccessMessageTemplate,
             onClipboardPinFavoritesToTopChange = clipboardViewModel::setPinFavoritesToTop,
             onClipboardPreviewLineCountChange = clipboardViewModel::setPreviewLineCount,
+            onClipboardWidgetFontSizeChange = clipboardViewModel::setWidgetFontSize,
             onSetPhraseFavorite = clipboardViewModel::setPhraseFavorite,
             onDeleteAllPhrases = clipboardViewModel::deleteAllPhrases,
             reminderUiState = reminderUiState,
@@ -222,6 +243,7 @@ private fun MyClipboardApp(
             onReminderShowWritingHintChange = reminderViewModel::setShowWritingHint,
             onReminderPinImportantToTopChange = reminderViewModel::setPinImportantToTop,
             onReminderPreviewLineCountChange = reminderViewModel::setPreviewLineCount,
+            onReminderWidgetFontSizeChange = reminderViewModel::setWidgetFontSize,
             onShowAddReminderDialog = reminderViewModel::showAddDialog,
             onReminderInputChange = reminderViewModel::onReminderInputChange,
             onToggleReminderHighlightSelection = reminderViewModel::toggleHighlightOnSelection,
@@ -232,6 +254,8 @@ private fun MyClipboardApp(
             onDeleteReminder = reminderViewModel::deleteReminder,
             onSetReminderImportant = reminderViewModel::setReminderImportant,
             onDeleteAllReminders = reminderViewModel::deleteAllReminders,
+            onSaveReminderBackup = reminderViewModel::saveCurrentBackup,
+            onRestoreReminderBackup = reminderViewModel::restoreBackup,
             snackbarHostState = snackbarHostState,
         )
     }

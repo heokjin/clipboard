@@ -49,7 +49,9 @@ import androidx.glance.unit.ColorProvider
 import com.soctt.myclipboard.MainActivity
 import com.soctt.myclipboard.R
 import com.soctt.myclipboard.data.ClipboardRepository
+import com.soctt.myclipboard.data.ClipboardSettingsRepository
 import com.soctt.myclipboard.data.ReminderRepository
+import com.soctt.myclipboard.data.ReminderSettingsRepository
 import com.soctt.myclipboard.data.local.ClipboardPhraseEntity
 import com.soctt.myclipboard.data.local.ReminderEntity
 import com.soctt.myclipboard.reminder.buildReminderWidgetText
@@ -73,6 +75,8 @@ class MyClipboardAppWidget : GlanceAppWidget() {
     ) {
         val reminderRepository = ReminderRepository(context)
         val clipboardRepository = ClipboardRepository(context)
+        val reminderSettingsRepository = ReminderSettingsRepository(context)
+        val clipboardSettingsRepository = ClipboardSettingsRepository(context)
         val snapshot = withContext(Dispatchers.IO) {
             WidgetSnapshot(
                 reminders = reminderRepository.getRecentReminders(limit = WidgetReminderDataLimit),
@@ -89,8 +93,10 @@ class MyClipboardAppWidget : GlanceAppWidget() {
                 .collectAsState(initial = snapshot.reminders)
             val phrases by clipboardRepository.observeRecentPhrases(limit = WidgetClipboardDataLimit)
                 .collectAsState(initial = snapshot.phrases)
+            val reminderSettings by reminderSettingsRepository.settings.collectAsState()
+            val clipboardSettings by clipboardSettingsRepository.settings.collectAsState()
 
-            LaunchedEffect(reminders, phrases) {
+            LaunchedEffect(reminders, phrases, reminderSettings, clipboardSettings) {
                 Log.d(
                     WidgetDebugTag,
                     "MyClipboardAppWidget.WidgetContent synced reminders=${reminders.size} phrases=${phrases.size}"
@@ -101,6 +107,8 @@ class MyClipboardAppWidget : GlanceAppWidget() {
             WidgetContent(
                 reminders = reminders,
                 phrases = phrases,
+                reminderWidgetFontSize = reminderSettings.widgetFontSize,
+                clipboardWidgetFontSize = clipboardSettings.widgetFontSize,
             )
         }
     }
@@ -154,6 +162,8 @@ private object WidgetColors {
 private fun WidgetContent(
     reminders: List<ReminderEntity>,
     phrases: List<ClipboardPhraseEntity>,
+    reminderWidgetFontSize: Int,
+    clipboardWidgetFontSize: Int,
 ) {
     val preferences = currentState<Preferences>()
     val currentPage = WidgetPage.fromValue(preferences[WidgetStateKeys.currentPage])
@@ -253,12 +263,14 @@ private fun WidgetContent(
                 WidgetPage.Reminder -> ReminderWidgetList(
                     reminders = reminders,
                     columns = if (isWide) 2 else 1,
+                    widgetFontSize = reminderWidgetFontSize,
                 )
 
                 WidgetPage.Clipboard -> ClipboardWidgetList(
                     phrases = phrases,
                     columns = if (isWide) 2 else 1,
                     isWide = isWide,
+                    widgetFontSize = clipboardWidgetFontSize,
                 )
             }
         }
@@ -300,6 +312,7 @@ private fun WidgetTabChip(
 private fun ReminderWidgetList(
     reminders: List<ReminderEntity>,
     columns: Int,
+    widgetFontSize: Int,
 ) {
     val context = androidx.glance.LocalContext.current
 
@@ -322,6 +335,7 @@ private fun ReminderWidgetList(
             ReminderWidgetRow(
                 rowItems = rowItems,
                 columns = columns,
+                widgetFontSize = widgetFontSize,
                 modifier = GlanceModifier
                     .fillMaxWidth()
                     .padding(bottom = 6.dp),
@@ -334,12 +348,14 @@ private fun ReminderWidgetList(
 private fun ReminderWidgetRow(
     rowItems: List<ReminderEntity>,
     columns: Int,
+    widgetFontSize: Int,
     modifier: GlanceModifier = GlanceModifier,
 ) {
     Row(modifier = modifier) {
         rowItems.forEachIndexed { itemIndex, reminder ->
             ReminderWidgetItem(
                 reminder = reminder,
+                widgetFontSize = widgetFontSize,
                 modifier = if (columns > 1 && rowItems.size == columns) {
                     GlanceModifier.defaultWeight().fillMaxHeight()
                 } else {
@@ -359,6 +375,7 @@ private fun ReminderWidgetRow(
 @androidx.compose.runtime.Composable
 private fun ReminderWidgetItem(
     reminder: ReminderEntity,
+    widgetFontSize: Int,
     modifier: GlanceModifier = GlanceModifier,
 ) {
     Text(
@@ -377,7 +394,7 @@ private fun ReminderWidgetItem(
                 )
             )
             .padding(horizontal = 10.dp, vertical = 8.dp),
-        style = TextStyle(fontSize = 13.sp),
+        style = TextStyle(fontSize = widgetFontSize.sp),
         maxLines = 2,
     )
 }
@@ -387,6 +404,7 @@ private fun ClipboardWidgetList(
     phrases: List<ClipboardPhraseEntity>,
     columns: Int,
     isWide: Boolean,
+    widgetFontSize: Int,
 ) {
     val context = androidx.glance.LocalContext.current
 
@@ -410,6 +428,7 @@ private fun ClipboardWidgetList(
                 rowItems = rowItems,
                 columns = columns,
                 isWide = isWide,
+                widgetFontSize = widgetFontSize,
                 modifier = GlanceModifier
                     .fillMaxWidth()
                     .padding(bottom = 6.dp),
@@ -439,12 +458,14 @@ private fun ClipboardWidgetRow(
     rowItems: List<ClipboardPhraseEntity>,
     columns: Int,
     isWide: Boolean,
+    widgetFontSize: Int,
     modifier: GlanceModifier = GlanceModifier,
 ) {
     Row(modifier = modifier) {
         rowItems.forEachIndexed { itemIndex, phrase ->
             ClipboardWidgetItem(
                 phrase = phrase,
+                widgetFontSize = widgetFontSize,
                 modifier = if (columns > 1 && rowItems.size == columns) {
                     GlanceModifier.defaultWeight().fillMaxHeight()
                 } else {
@@ -487,6 +508,7 @@ private fun clipboardRowCount(
 @androidx.compose.runtime.Composable
 private fun ClipboardWidgetItem(
     phrase: ClipboardPhraseEntity,
+    widgetFontSize: Int,
     modifier: GlanceModifier = GlanceModifier,
     contentMaxLines: Int,
 ) {
@@ -509,7 +531,7 @@ private fun ClipboardWidgetItem(
             )
             .padding(horizontal = 10.dp, vertical = 8.dp),
         style = TextStyle(
-            fontSize = 12.sp,
+            fontSize = widgetFontSize.sp,
             fontWeight = FontWeight.Medium,
         ),
         maxLines = contentMaxLines + 1,

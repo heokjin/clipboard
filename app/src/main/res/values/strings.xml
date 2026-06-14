@@ -34,6 +34,8 @@
     <string name="pin_favorites_setting_description">Show favorite items before regular items.</string>
     <string name="preview_lines_setting_title">Preview lines</string>
     <string name="preview_lines_setting_description">Choose how many content lines each card shows.</string>
+    <string name="widget_font_size_setting_title">Widget font size</string>
+    <string name="widget_font_size_setting_description">Adjust the text size used by this tab in the widget.</string>
     <string name="theme_setting_title">Theme</string>
     <string name="theme_system_option">Use system setting</string>
     <string name="theme_light_option">Light</string>
@@ -63,6 +65,14 @@
     <string name="reminder_preview_lines_setting_description">Choose how many lines each reminder card shows.</string>
     <string name="reminder_important_action">Important</string>
     <string name="reminder_unimportant_action">Unmark</string>
+    <string name="reminder_backup_save_action">Save reminder backup</string>
+    <string name="reminder_backup_available_action">Backed up (Restore)</string>
+    <string name="reminder_backup_restore_action">Restore reminder backup</string>
+    <string name="reminder_backup_restore_confirm_title">Restore reminder backup?</string>
+    <string name="reminder_backup_restore_confirm_body">Current reminders will be deleted and replaced with the backed up list.</string>
+    <string name="reminder_backup_saved_message">Saved backup with %1$d reminders</string>
+    <string name="reminder_backup_restored_message">Restored %1$d reminders from backup</string>
+    <string name="reminder_backup_unavailable_message">No reminder backup to restore</string>
     <string name="delete_all_reminders_action">Delete all reminders</string>
     <string name="delete_all_reminders_confirm_title">Delete all reminders?</string>
     <string name="delete_all_reminders_confirm_body">This removes every saved reminder and cannot be undone.</string>

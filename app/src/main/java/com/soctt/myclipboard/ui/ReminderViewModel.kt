@@ -33,6 +33,12 @@ import kotlinx.coroutines.launch
 
 private const val WidgetDebugTag = "WidgetDebug"
 
+sealed interface ReminderSettingsEvent {
+    data class BackupSaved(val count: Int) : ReminderSettingsEvent
+    data class BackupRestored(val count: Int) : ReminderSettingsEvent
+    data object BackupUnavailable : ReminderSettingsEvent
+}
+
 private fun mergedSelectionCandidate(
     current: TextRange?,
     previous: TextRange?,
@@ -58,8 +64,10 @@ class ReminderViewModel(
     private val scrollToTopTick = MutableStateFlow(0)
     private val editorState = MutableStateFlow(EditorState())
     private val isSettingsVisible = MutableStateFlow(false)
+    private val hasBackup = MutableStateFlow(repository.hasBackup())
     private var saveJob: Job? = null
     private val _deletedReminderEvents = MutableSharedFlow<ReminderEntity>(extraBufferCapacity = 1)
+    private val _settingsEvents = MutableSharedFlow<ReminderSettingsEvent>(extraBufferCapacity = 1)
     private val reminders = combine(
         searchQuery,
         settingsRepository.settings,
@@ -74,8 +82,13 @@ class ReminderViewModel(
     private val settingsUiState = combine(
         settingsRepository.settings,
         isSettingsVisible,
-    ) { settings, isSettingsVisible ->
-        settings to isSettingsVisible
+        hasBackup,
+    ) { settings, isSettingsVisible, hasBackup ->
+        ReminderSettingsUiState(
+            settings = settings,
+            isSettingsVisible = isSettingsVisible,
+            hasBackup = hasBackup,
+        )
     }
 
     val uiState: StateFlow<ReminderUiState> = combine(
@@ -85,7 +98,7 @@ class ReminderViewModel(
         editorState,
         settingsUiState,
     ) { query, scrollTick, reminders, editor, settingsUiState ->
-        val (settings, isSettingsVisible) = settingsUiState
+        val settings = settingsUiState.settings
         ReminderUiState(
             searchQuery = query,
             scrollToTopTick = scrollTick,
@@ -93,7 +106,9 @@ class ReminderViewModel(
             showWritingHint = settings.showWritingHint,
             pinImportantToTop = settings.pinImportantToTop,
             previewLineCount = settings.previewLineCount,
-            isSettingsVisible = isSettingsVisible,
+            widgetFontSize = settings.widgetFontSize,
+            hasBackup = settingsUiState.hasBackup,
+            isSettingsVisible = settingsUiState.isSettingsVisible,
             isEditorVisible = editor.isVisible,
             editingReminderId = editor.editingReminderId,
             reminderInputValue = editor.inputValue,
@@ -112,6 +127,7 @@ class ReminderViewModel(
     )
 
     val deletedReminderEvents: SharedFlow<ReminderEntity> = _deletedReminderEvents.asSharedFlow()
+    val settingsEvents: SharedFlow<ReminderSettingsEvent> = _settingsEvents.asSharedFlow()
 
     fun onSearchQueryChange(query: String) {
         searchQuery.value = query
@@ -146,6 +162,10 @@ class ReminderViewModel(
 
     fun setPreviewLineCount(lineCount: Int) {
         settingsRepository.setPreviewLineCount(lineCount)
+    }
+
+    fun setWidgetFontSize(fontSize: Int) {
+        settingsRepository.setWidgetFontSize(fontSize)
     }
 
     fun handleEditorBack() {
@@ -290,6 +310,26 @@ class ReminderViewModel(
         }
     }
 
+    fun saveCurrentBackup() {
+        viewModelScope.launch {
+            val count = repository.saveCurrentBackup()
+            hasBackup.value = repository.hasBackup()
+            _settingsEvents.tryEmit(ReminderSettingsEvent.BackupSaved(count))
+        }
+    }
+
+    fun restoreBackup() {
+        viewModelScope.launch {
+            val count = repository.restoreBackup()
+            if (count != null) {
+                _settingsEvents.tryEmit(ReminderSettingsEvent.BackupRestored(count))
+                scrollToTopTick.value += 1
+            } else {
+                _settingsEvents.tryEmit(ReminderSettingsEvent.BackupUnavailable)
+            }
+        }
+    }
+
     fun restoreReminder(reminder: ReminderEntity) {
         viewModelScope.launch {
             repository.restoreReminder(reminder)
@@ -340,6 +380,12 @@ class ReminderViewModel(
             }
         }
     }
+
+    private data class ReminderSettingsUiState(
+        val settings: com.soctt.myclipboard.data.ReminderSettings,
+        val isSettingsVisible: Boolean,
+        val hasBackup: Boolean,
+    )
 
     private suspend fun saveEditor(
         editor: EditorState,

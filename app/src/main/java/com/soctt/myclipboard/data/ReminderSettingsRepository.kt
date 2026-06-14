@@ -2,6 +2,7 @@ package com.soctt.myclipboard.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.soctt.myclipboard.widget.MyClipboardWidgetSync
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -10,14 +11,18 @@ private const val ReminderSettingsPrefsName = "reminder_settings"
 private const val ShowWritingHintKey = "show_writing_hint"
 private const val PinImportantToTopKey = "pin_important_to_top"
 private const val PreviewLineCountKey = "preview_line_count"
+private const val WidgetFontSizeKey = "widget_font_size"
 
 const val MinReminderPreviewLineCount = 1
 const val MaxReminderPreviewLineCount = 5
+const val MinReminderWidgetFontSize = 10
+const val MaxReminderWidgetFontSize = 18
 
 data class ReminderSettings(
     val showWritingHint: Boolean = true,
     val pinImportantToTop: Boolean = true,
     val previewLineCount: Int = 2,
+    val widgetFontSize: Int = 13,
 )
 
 class ReminderSettingsRepository(context: Context) {
@@ -55,12 +60,21 @@ class ReminderSettingsRepository(context: Context) {
             .apply()
     }
 
+    fun setWidgetFontSize(fontSize: Int) {
+        prefs.edit()
+            .putInt(WidgetFontSizeKey, fontSize.coerceIn(MinReminderWidgetFontSize, MaxReminderWidgetFontSize))
+            .apply()
+        MyClipboardWidgetSync.markDirty()
+    }
+
     private fun SharedPreferences.readSettings(): ReminderSettings {
         return ReminderSettings(
             showWritingHint = getBoolean(ShowWritingHintKey, true),
             pinImportantToTop = getBoolean(PinImportantToTopKey, true),
             previewLineCount = getInt(PreviewLineCountKey, 2)
                 .coerceIn(MinReminderPreviewLineCount, MaxReminderPreviewLineCount),
+            widgetFontSize = getInt(WidgetFontSizeKey, 13)
+                .coerceIn(MinReminderWidgetFontSize, MaxReminderWidgetFontSize),
         )
     }
 }

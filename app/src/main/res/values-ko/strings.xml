@@ -34,6 +34,8 @@
     <string name="pin_favorites_setting_description">즐겨찾기한 항목을 일반 항목보다 위에 표시합니다.</string>
     <string name="preview_lines_setting_title">미리보기 줄 수</string>
     <string name="preview_lines_setting_description">각 카드에 표시할 내용 줄 수를 선택합니다.</string>
+    <string name="widget_font_size_setting_title">위젯 글자 크기</string>
+    <string name="widget_font_size_setting_description">위젯에서 이 탭의 항목 글자 크기를 조절합니다.</string>
     <string name="theme_setting_title">테마</string>
     <string name="theme_system_option">시스템 설정 사용</string>
     <string name="theme_light_option">라이트</string>
@@ -63,6 +65,14 @@
     <string name="reminder_preview_lines_setting_description">각 리마인더 카드에 표시할 줄 수를 선택합니다.</string>
     <string name="reminder_important_action">중요</string>
     <string name="reminder_unimportant_action">해제</string>
+    <string name="reminder_backup_save_action">리마인더 백업 저장</string>
+    <string name="reminder_backup_available_action">백업됨(복구하기)</string>
+    <string name="reminder_backup_restore_action">리마인더 백업 복구</string>
+    <string name="reminder_backup_restore_confirm_title">리마인더 백업을 복구할까요?</string>
+    <string name="reminder_backup_restore_confirm_body">현재 리마인더가 모두 삭제되고 백업된 목록으로 교체됩니다.</string>
+    <string name="reminder_backup_saved_message">%1$d개의 리마인더를 백업했습니다</string>
+    <string name="reminder_backup_restored_message">백업에서 %1$d개의 리마인더를 복구했습니다</string>
+    <string name="reminder_backup_unavailable_message">복구할 리마인더 백업이 없습니다</string>
     <string name="delete_all_reminders_action">리마인더 전체 삭제</string>
     <string name="delete_all_reminders_confirm_title">모든 리마인더를 삭제할까요?</string>
     <string name="delete_all_reminders_confirm_body">저장된 리마인더가 모두 삭제되며 되돌릴 수 없습니다.</string>
