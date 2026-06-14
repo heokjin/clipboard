@@ -15,6 +15,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -38,6 +39,8 @@ private enum class HomePage(
 @Composable
 fun HomeScreen(
     initialPage: Int = 0,
+    navigationPage: Int = initialPage,
+    navigationRequestTick: Int = 0,
     clipboardUiState: ClipboardUiState,
     onSearchQueryChange: (String) -> Unit,
     onShowAddPhraseDialog: () -> Unit,
@@ -84,6 +87,13 @@ fun HomeScreen(
         pageCount = { pages.size },
     )
     val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(navigationRequestTick, navigationPage) {
+        if (navigationRequestTick > 0) {
+            pagerState.scrollToPage(navigationPage.coerceIn(0, pages.lastIndex))
+        }
+    }
+
     val currentPage = pages[pagerState.currentPage]
     val isEditorVisible = when (currentPage) {
         HomePage.Clipboard -> clipboardUiState.isEditorVisible

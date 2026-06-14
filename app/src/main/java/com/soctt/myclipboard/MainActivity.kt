@@ -3,6 +3,7 @@ package com.soctt.myclipboard
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -45,32 +46,27 @@ import kotlinx.coroutines.launch
 
 private const val WidgetDebugTag = "WidgetDebug"
 class MainActivity : ComponentActivity() {
+    private var launchRequest by mutableStateOf(AppLaunchRequest())
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val initialPage = when (intent?.getStringExtra(MyClipboardWidgetNavigation.EXTRA_START_PAGE)) {
-            MyClipboardWidgetNavigation.PAGE_CLIPBOARD -> 1
-            else -> 0
-        }
-        val initialReminderId = intent?.getLongExtra(MyClipboardWidgetNavigation.EXTRA_REMINDER_ID, -1L)
-            ?.takeIf { it >= 0L }
-        val shouldStartAdd = intent?.getStringExtra(MyClipboardWidgetNavigation.EXTRA_START_ACTION) ==
-            MyClipboardWidgetNavigation.START_ACTION_ADD
+        launchRequest = intent.toAppLaunchRequest(sequence = 0)
         setContent {
-            MyClipboardApp(
-                initialPage = initialPage,
-                initialReminderId = initialReminderId,
-                shouldStartAdd = shouldStartAdd,
-            )
+            MyClipboardApp(launchRequest = launchRequest)
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        launchRequest = intent.toAppLaunchRequest(sequence = launchRequest.sequence + 1)
     }
 }
 
 @Composable
 private fun MyClipboardApp(
-    initialPage: Int,
-    initialReminderId: Long?,
-    shouldStartAdd: Boolean,
+    launchRequest: AppLaunchRequest,
 ) {
     val context = LocalContext.current
     val appContext = context.applicationContext
@@ -127,17 +123,25 @@ private fun MyClipboardApp(
             }
         }
 
-        LaunchedEffect(initialReminderId, reminderViewModel) {
-            initialReminderId?.let { reminderId ->
-                reminderViewModel.startEditById(reminderId)
-            }
-        }
+        LaunchedEffect(launchRequest.sequence, launchRequest, clipboardViewModel, reminderViewModel) {
+            if (launchRequest.isWidgetNavigation) {
+                clipboardViewModel.dismissSettings()
+                reminderViewModel.dismissSettings()
+                clipboardViewModel.dismissEditor()
+                reminderViewModel.dismissEditor()
 
-        LaunchedEffect(shouldStartAdd, initialPage, clipboardViewModel, reminderViewModel) {
-            if (shouldStartAdd) {
-                when (initialPage) {
-                    1 -> clipboardViewModel.showAddDialog()
-                    else -> reminderViewModel.showAddDialog()
+                when {
+                    launchRequest.shouldStartAdd && launchRequest.page == ClipboardPageIndex -> {
+                        clipboardViewModel.showAddDialog()
+                    }
+
+                    launchRequest.shouldStartAdd -> {
+                        reminderViewModel.showAddDialog()
+                    }
+
+                    launchRequest.reminderId != null -> {
+                        reminderViewModel.startEditById(launchRequest.reminderId)
+                    }
                 }
             }
         }
@@ -182,7 +186,9 @@ private fun MyClipboardApp(
         }
 
         HomeScreen(
-            initialPage = initialPage,
+            initialPage = launchRequest.page,
+            navigationPage = launchRequest.page,
+            navigationRequestTick = launchRequest.sequence,
             clipboardUiState = clipboardUiState,
             onSearchQueryChange = clipboardViewModel::onSearchQueryChange,
             onShowAddPhraseDialog = clipboardViewModel::showAddDialog,
@@ -229,6 +235,40 @@ private fun MyClipboardApp(
             snackbarHostState = snackbarHostState,
         )
     }
+}
+
+private const val ReminderPageIndex = 0
+private const val ClipboardPageIndex = 1
+
+private data class AppLaunchRequest(
+    val sequence: Int = 0,
+    val page: Int = ReminderPageIndex,
+    val reminderId: Long? = null,
+    val shouldStartAdd: Boolean = false,
+    val isWidgetNavigation: Boolean = false,
+)
+
+private fun Intent?.toAppLaunchRequest(sequence: Int): AppLaunchRequest {
+    val startPage = this?.getStringExtra(MyClipboardWidgetNavigation.EXTRA_START_PAGE)
+    val page = when (startPage) {
+        MyClipboardWidgetNavigation.PAGE_CLIPBOARD -> ClipboardPageIndex
+        else -> ReminderPageIndex
+    }
+    val reminderId = this?.getLongExtra(MyClipboardWidgetNavigation.EXTRA_REMINDER_ID, -1L)
+        ?.takeIf { it >= 0L }
+    val shouldStartAdd = this?.getStringExtra(MyClipboardWidgetNavigation.EXTRA_START_ACTION) ==
+        MyClipboardWidgetNavigation.START_ACTION_ADD
+    val isWidgetNavigation = this?.hasExtra(MyClipboardWidgetNavigation.EXTRA_START_PAGE) == true ||
+        this?.hasExtra(MyClipboardWidgetNavigation.EXTRA_START_ACTION) == true ||
+        this?.hasExtra(MyClipboardWidgetNavigation.EXTRA_REMINDER_ID) == true
+
+    return AppLaunchRequest(
+        sequence = sequence,
+        page = page,
+        reminderId = reminderId,
+        shouldStartAdd = shouldStartAdd,
+        isWidgetNavigation = isWidgetNavigation,
+    )
 }
 
 private fun String.toCopySuccessMessage(
