@@ -1,0 +1,84 @@
+package com.scott.myclipboard.data.local
+
+import androidx.room.Dao
+import androidx.room.Delete
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface ClipboardPhraseDao {
+    @Query(
+        """
+        SELECT * FROM clipboard_phrases
+        WHERE :query = ''
+            OR title LIKE '%' || :query || '%'
+            OR content LIKE '%' || :query || '%'
+        ORDER BY
+            CASE WHEN :pinFavoritesToTop THEN isFavorite ELSE 0 END DESC,
+            updatedAt DESC
+        """
+    )
+    fun observePhrases(
+        query: String,
+        pinFavoritesToTop: Boolean,
+    ): Flow<List<ClipboardPhraseEntity>>
+
+    @Query(
+        """
+        SELECT * FROM clipboard_phrases
+        ORDER BY updatedAt DESC
+        LIMIT :limit
+        """
+    )
+    fun observeRecentPhrases(limit: Int): Flow<List<ClipboardPhraseEntity>>
+
+    @Query(
+        """
+        SELECT * FROM clipboard_phrases
+        ORDER BY updatedAt DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun getRecentPhrases(limit: Int): List<ClipboardPhraseEntity>
+
+    @Query(
+        """
+        SELECT * FROM clipboard_phrases
+        ORDER BY updatedAt DESC
+        """
+    )
+    suspend fun getAllPhrases(): List<ClipboardPhraseEntity>
+
+    @Query(
+        """
+        SELECT * FROM clipboard_phrases
+        WHERE id = :id
+        LIMIT 1
+        """
+    )
+    suspend fun getPhraseById(id: Long): ClipboardPhraseEntity?
+
+    @Query(
+        """
+        SELECT * FROM clipboard_phrases
+        WHERE content = :content
+        LIMIT 1
+        """
+    )
+    suspend fun getPhraseByContent(content: String): ClipboardPhraseEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(phrase: ClipboardPhraseEntity): Long
+
+    @Update
+    suspend fun update(phrase: ClipboardPhraseEntity)
+
+    @Delete
+    suspend fun delete(phrase: ClipboardPhraseEntity)
+
+    @Query("DELETE FROM clipboard_phrases")
+    suspend fun deleteAll()
+}

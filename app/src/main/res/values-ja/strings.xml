@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">マイクリップボード</string>
+    <string name="app_name">マイリマインダー</string>
     <string name="add_action">追加</string>
     <string name="search_label">検索</string>
     <string name="search_placeholder">タイトルまたは内容を検索</string>
@@ -36,7 +36,7 @@
     <string name="reminder_preview_placeholder">書式付きリマインダーのプレビューがここに表示されます。</string>
     <string name="reminder_delete_progress_hint">押し続けると、このリマインダーを削除します。</string>
     <string name="reminder_deleted_message">リマインダーを削除しました</string>
-    <string name="widget_name">マイクリップボード ウィジェット</string>
+    <string name="widget_name">マイリマインダー ウィジェット</string>
     <string name="widget_description">リマインダーまたはクリップボードの定型文を表示し、縦に広げるとさらに多くの項目を表示します。</string>
     <string name="widget_tab_reminder">リマインダー</string>
     <string name="widget_tab_clipboard">クリップボード</string>

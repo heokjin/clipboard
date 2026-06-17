@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">我的剪贴板</string>
+    <string name="app_name">我的提醒</string>
     <string name="add_action">添加</string>
     <string name="search_label">搜索</string>
     <string name="search_placeholder">搜索标题或内容</string>
@@ -36,7 +36,7 @@
     <string name="reminder_preview_placeholder">带格式的提醒预览会显示在这里。</string>
     <string name="reminder_delete_progress_hint">继续按住即可删除此提醒。</string>
     <string name="reminder_deleted_message">提醒已删除</string>
-    <string name="widget_name">我的剪贴板小组件</string>
+    <string name="widget_name">我的提醒小组件</string>
     <string name="widget_description">显示提醒或剪贴板常用语，纵向展开可查看更多项目。</string>
     <string name="widget_tab_reminder">提醒</string>
     <string name="widget_tab_clipboard">剪贴板</string>
